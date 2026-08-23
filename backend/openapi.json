@@ -1,0 +1,1882 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Ticket Booking System API",
+    "version": "1.0.0",
+    "description": "Booking platform for movies and concerts. Seats are held temporarily with a server-enforced TTL, protected against concurrent acquisition by conditional atomic updates, and released to a FIFO waitlist on cancellation.\n\nAuthenticate with `POST /api/auth/login`, then send `Authorization: Bearer <token>`."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000",
+      "description": "Local development"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Registration, login and profile"
+    },
+    {
+      "name": "Public",
+      "description": "Browsing events and seat maps (no auth)"
+    },
+    {
+      "name": "Customer",
+      "description": "Holds, bookings and cancellation"
+    },
+    {
+      "name": "Waitlist",
+      "description": "FIFO queue and time-limited seat offers"
+    },
+    {
+      "name": "Organiser",
+      "description": "Events, shows, pricing, revenue"
+    },
+    {
+      "name": "Admin",
+      "description": "Venues, categories and seat layouts"
+    },
+    {
+      "name": "Dev",
+      "description": "Development helpers"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Service health",
+        "description": "Reports configured TTLs and the active mail transport.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok",
+                  "holdTtlSeconds": 600,
+                  "waitlistOfferTtlSeconds": 300,
+                  "mailTransport": "file"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register",
+        "description": "Creates a CUSTOMER or ORGANISER. ADMIN accounts cannot self-register.",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "user": {
+                    "id": 1,
+                    "name": "Priya Nair",
+                    "email": "priya@example.com",
+                    "role": "CUSTOMER"
+                  },
+                  "token": "eyJhbGci..."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed, or role is not self-registerable"
+          },
+          "409": {
+            "description": "Email already registered"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Priya Nair",
+                "email": "priya@example.com",
+                "password": "Password123!",
+                "role": "CUSTOMER"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in",
+        "description": "Returns a JWT. The same message is returned for an unknown email and a wrong password.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "user": {
+                    "id": 1,
+                    "role": "CUSTOMER"
+                  },
+                  "token": "eyJhbGci..."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Email or password is incorrect"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "priya@example.com",
+                "password": "Password123!"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Current user",
+        "description": "Resolves the bearer token to a user record.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "user": {
+                    "id": 1,
+                    "name": "Priya Nair",
+                    "role": "CUSTOMER"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired token"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/events": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Browse and filter events",
+        "description": "All filters are optional and combine with AND.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "events": [
+                    {
+                      "id": 1,
+                      "title": "The Longest Monsoon",
+                      "type": "MOVIE",
+                      "showCount": 2,
+                      "cities": [
+                        "Bengaluru"
+                      ],
+                      "fromPrice": 250
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Free-text match on title/description",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "MOVIE or CONCERT",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "required": false,
+            "description": "Partial city match",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "venueId",
+            "in": "query",
+            "required": false,
+            "description": "Restrict to one venue",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "ISO date lower bound on show time",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "ISO date upper bound on show time",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/events/meta/cities": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "List cities",
+        "description": "Distinct venue cities, for building filter UI.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "cities": [
+                    "Bengaluru",
+                    "Chennai"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Event detail",
+        "description": "Includes every scheduled show with live availability.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "event": {
+                    "id": 1,
+                    "title": "The Longest Monsoon"
+                  },
+                  "shows": [
+                    {
+                      "id": 1,
+                      "startsAt": "2026-08-25T18:00:00.000Z",
+                      "seatsAvailable": 54,
+                      "soldOut": false,
+                      "fromPrice": 250
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such event"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/events/shows/{showId}/seatmap": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Live seat map",
+        "description": "Seat status per show: AVAILABLE, HELD, BOOKED or OFFERED (reserved for a waitlist customer). Expired holds are swept before the response is built, so the map is never stale. If a bearer token is supplied, `myHold` describes the caller's own active hold.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "show": {
+                    "id": 1,
+                    "eventTitle": "The Longest Monsoon"
+                  },
+                  "categories": [
+                    {
+                      "id": 1,
+                      "name": "Premium",
+                      "price": 450,
+                      "available": 18,
+                      "soldOut": false
+                    }
+                  ],
+                  "seats": [
+                    {
+                      "id": 1,
+                      "label": "A1",
+                      "category": "Premium",
+                      "price": 450,
+                      "status": "AVAILABLE"
+                    }
+                  ],
+                  "myHold": {
+                    "holdId": 7,
+                    "expiresAt": "2026-08-23T10:35:16.912Z",
+                    "seatIds": [
+                      1,
+                      2
+                    ]
+                  },
+                  "holdTtlSeconds": 600
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such show"
+          }
+        },
+        "parameters": [
+          {
+            "name": "showId",
+            "in": "path",
+            "required": true,
+            "description": "Show id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/holds": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Hold seats",
+        "description": "Places an all-or-nothing temporary hold. Two customers cannot both acquire the same seat: the update is conditional on the seat still being AVAILABLE, and any failure rolls the whole request back. A customer's previous hold on the same show is released first.",
+        "responses": {
+          "201": {
+            "description": "Held",
+            "content": {
+              "application/json": {
+                "example": {
+                  "holdId": 7,
+                  "showId": 1,
+                  "expiresAt": "2026-08-23T10:35:16.912Z",
+                  "ttlSeconds": 600,
+                  "seats": [
+                    {
+                      "id": 12,
+                      "label": "C1",
+                      "category": "Standard",
+                      "price": 250
+                    }
+                  ],
+                  "total": 500
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No seats given, too many seats, or seats from another show"
+          },
+          "401": {
+            "description": "Not signed in"
+          },
+          "403": {
+            "description": "Not a customer account"
+          },
+          "404": {
+            "description": "Show or seat does not exist"
+          },
+          "409": {
+            "description": "A seat was taken by someone else, or the show already started",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "CONFLICT",
+                    "message": "Seat A4 was just taken. Pick another one."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "showId": 1,
+                "seatIds": [
+                  12,
+                  13
+                ],
+                "ttlSeconds": 600
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/holds/{id}": {
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Hold detail",
+        "description": "Reports remaining time and whether the hold has already lapsed.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "holdId": 7,
+                  "expiresAt": "2026-08-23T10:35:16.912Z",
+                  "expired": false,
+                  "seats": [
+                    {
+                      "id": 12,
+                      "label": "C1",
+                      "price": 250
+                    }
+                  ],
+                  "total": 250
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The hold belongs to another account"
+          },
+          "404": {
+            "description": "No such hold"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Hold id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Release a hold",
+        "description": "Returns the seats to AVAILABLE immediately.",
+        "responses": {
+          "200": {
+            "description": "Released",
+            "content": {
+              "application/json": {
+                "example": {
+                  "released": 2
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The hold belongs to another account"
+          },
+          "404": {
+            "description": "No such hold"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Hold id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/bookings": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Confirm a booking",
+        "description": "Converts an active hold into a booking, generates a unique reference and a QR code, and emails the ticket. An expired hold is refused.",
+        "responses": {
+          "201": {
+            "description": "Booked",
+            "content": {
+              "application/json": {
+                "example": {
+                  "booking": {
+                    "id": 3,
+                    "reference": "TBS-3M6XS6TU",
+                    "status": "CONFIRMED",
+                    "total": 500,
+                    "qrDataUrl": "data:image/png;base64,...",
+                    "seats": [
+                      {
+                        "label": "C1",
+                        "category": "Standard",
+                        "price": 250
+                      }
+                    ],
+                    "email": {
+                      "transport": "file",
+                      "ok": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The hold belongs to another account"
+          },
+          "409": {
+            "description": "The hold expired or no longer covers seats"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "holdId": 7
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Booking history",
+        "description": "Only ever returns the caller's own bookings.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "bookings": [
+                    {
+                      "id": 3,
+                      "reference": "TBS-3M6XS6TU",
+                      "status": "CONFIRMED",
+                      "total": 500,
+                      "seats": "C1, C2"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/bookings/{id}": {
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Booking detail",
+        "description": "Includes the QR code for entry.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "The booking belongs to another account"
+          },
+          "404": {
+            "description": "No such booking"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/bookings/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Cancel a booking",
+        "description": "Releases the seats. Each freed seat is offered to the next waiting customer in that category before returning to the public pool.",
+        "responses": {
+          "200": {
+            "description": "Cancelled",
+            "content": {
+              "application/json": {
+                "example": {
+                  "reference": "TBS-3M6XS6TU",
+                  "status": "CANCELLED",
+                  "seatsReleased": 2,
+                  "offersCreated": 1
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The booking belongs to another account"
+          },
+          "409": {
+            "description": "Already cancelled, or the show has started"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/bookings/{id}/resend-ticket": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Re-send the ticket email",
+        "description": "Regenerates the QR and re-sends the confirmation.",
+        "responses": {
+          "200": {
+            "description": "Sent",
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": {
+                    "transport": "file",
+                    "ok": true
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not your booking"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/waitlist": {
+      "post": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "Join the waitlist",
+        "description": "Only permitted when the seat category has no AVAILABLE seats. Position is assigned FIFO.",
+        "responses": {
+          "201": {
+            "description": "Joined",
+            "content": {
+              "application/json": {
+                "example": {
+                  "waitlistId": 4,
+                  "category": "Premium",
+                  "position": 2,
+                  "peopleAhead": 1,
+                  "status": "WAITING"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Show or category does not exist"
+          },
+          "409": {
+            "description": "Seats are still available, or you are already queued"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "showId": 1,
+                "categoryId": 2
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "My waitlist entries",
+        "description": "Includes any pending offer and its expiry.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "entries": [
+                    {
+                      "waitlistId": 4,
+                      "status": "OFFERED",
+                      "position": 1,
+                      "peopleAhead": 0,
+                      "category": "Premium",
+                      "offer": {
+                        "id": 9,
+                        "seatLabel": "A3",
+                        "showSeatId": 31,
+                        "expiresAt": "2026-08-23T10:40:00.000Z"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/waitlist/{id}": {
+      "delete": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "Leave the waitlist",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Left",
+            "content": {
+              "application/json": {
+                "example": {
+                  "waitlistId": 4,
+                  "status": "CANCELLED"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not your entry"
+          },
+          "404": {
+            "description": "No such entry"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Waitlist entry id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/waitlist/offers/{id}/accept": {
+      "post": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "Accept an offer",
+        "description": "Converts the reserved seat into a normal hold owned by the caller, who then checks out via POST /api/bookings.",
+        "responses": {
+          "200": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "example": {
+                  "holdId": 11,
+                  "showId": 1,
+                  "seatIds": [
+                    31
+                  ],
+                  "expiresAt": "2026-08-23T10:50:00.000Z"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The offer belongs to someone else"
+          },
+          "409": {
+            "description": "The offer already expired or was withdrawn"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Offer id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/waitlist/offers/{id}/decline": {
+      "post": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "Decline an offer",
+        "description": "Immediately re-offers the seat to the next customer in the queue.",
+        "responses": {
+          "200": {
+            "description": "Declined",
+            "content": {
+              "application/json": {
+                "example": {
+                  "offerId": 9,
+                  "status": "DECLINED",
+                  "reoffered": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not your offer"
+          },
+          "409": {
+            "description": "No longer open"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Offer id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/waitlist/sweep": {
+      "post": {
+        "tags": [
+          "Waitlist"
+        ],
+        "summary": "Force an expiry sweep",
+        "description": "ADMIN only. The background scheduler already does this continuously; this endpoint exists for tests and demos.",
+        "responses": {
+          "200": {
+            "description": "Swept",
+            "content": {
+              "application/json": {
+                "example": {
+                  "showsTouched": [
+                    1
+                  ],
+                  "seatsChanged": 2,
+                  "offersCreated": 1
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admins only"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/venues": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List venues",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Admins only"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create a venue",
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "403": {
+            "description": "Admins only"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Aurora Cineplex",
+                "city": "Bengaluru",
+                "address": "14 Residency Road"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/venues/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Venue detail with categories and seats",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such venue"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Venue id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update a venue",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Aurora Cineplex \u2014 Screen 2"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Venue id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete a venue",
+        "description": "Refused while shows are scheduled there.",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "Shows are scheduled at this venue"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Venue id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/venues/{id}/categories": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Add a seat category",
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "409": {
+            "description": "Category already exists here"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "name": "Premium",
+                "rank": 0
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Venue id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/categories/{id}": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Delete a seat category",
+        "description": "",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "In use by a scheduled show"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Category id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/venues/{id}/layout": {
+      "put": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Define the seat layout",
+        "description": "Replaces the venue's seats with individually addressable seats generated from row blocks. Refused once a show holds inventory built from them.",
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "venueId": 1,
+                  "seatCount": 22
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad rows, duplicate labels, or a category from another venue"
+          },
+          "409": {
+            "description": "Seats are already in use by a show"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "rows": [
+                  {
+                    "rowLabel": "A",
+                    "seats": 10,
+                    "categoryId": 1
+                  },
+                  {
+                    "rowLabel": "C",
+                    "seats": 12,
+                    "categoryId": 2
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Venue id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Platform statistics",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "users": 6,
+                  "venues": 3,
+                  "bookings": 2,
+                  "revenue": 900
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organiser/events": {
+      "get": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "List my events",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Organisers only"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Create an event",
+        "description": "",
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Validation failed"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "The Longest Monsoon",
+                "type": "MOVIE",
+                "description": "...",
+                "language": "Malayalam",
+                "durationMin": 138
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/organiser/events/{id}": {
+      "get": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "My event with its shows",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Another organiser's event"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Update an event",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "403": {
+            "description": "Another organiser's event"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "New title"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Delete an event",
+        "description": "",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "Confirmed bookings exist"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/organiser/events/{id}/shows": {
+      "post": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Schedule a show",
+        "description": "Materialises per-show seat inventory from the venue layout. Every seat category must be priced.",
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "example": {
+                  "show": {
+                    "id": 1
+                  },
+                  "seatsCreated": 56
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Venue has no layout, or a category is unpriced"
+          },
+          "404": {
+            "description": "Venue not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "venueId": 1,
+                "startsAt": "2026-09-01T18:00:00.000Z",
+                "prices": [
+                  {
+                    "categoryId": 1,
+                    "price": 450
+                  },
+                  {
+                    "categoryId": 2,
+                    "price": 250
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/organiser/shows/{id}/prices": {
+      "patch": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Update pricing",
+        "description": "Refused once seats have sold at the current prices.",
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "409": {
+            "description": "Seats already sold"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "prices": [
+                  {
+                    "categoryId": 1,
+                    "price": 500
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Show id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/organiser/shows/{id}": {
+      "delete": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Delete a show",
+        "description": "",
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "409": {
+            "description": "Confirmed bookings exist"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Show id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/organiser/events/{id}/summary": {
+      "get": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Booking summary",
+        "description": "Occupancy, seats held/booked, waitlist depth and revenue by show and category.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "totals": {
+                    "seatsTotal": 56,
+                    "seatsBooked": 2,
+                    "revenue": 900,
+                    "occupancy": 0.0357
+                  },
+                  "shows": [],
+                  "byCategory": []
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Another organiser's event"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Event id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/organiser/revenue": {
+      "get": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Revenue per event",
+        "description": "Confirmed bookings only.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "events": [
+                    {
+                      "event_id": 1,
+                      "title": "The Longest Monsoon",
+                      "bookings": 2,
+                      "revenue": 900
+                    }
+                  ],
+                  "total": 900
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organiser/shows/{id}/bookings": {
+      "get": {
+        "tags": [
+          "Organiser"
+        ],
+        "summary": "Bookings for a show",
+        "description": "",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Another organiser's show"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Show id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/dev/emails": {
+      "get": {
+        "tags": [
+          "Dev"
+        ],
+        "summary": "List sent emails",
+        "description": "Development outbox. Every send attempt is recorded regardless of transport.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "transport": "file",
+                  "emails": [
+                    {
+                      "id": 1,
+                      "to_email": "priya@example.com",
+                      "subject": "Your tickets ...",
+                      "status": "SENT"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Max rows (default 20)",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/api/dev/emails/{id}": {
+      "get": {
+        "tags": [
+          "Dev"
+        ],
+        "summary": "View one email as HTML",
+        "description": "Renders the exact message body that was sent, including the inline QR code.",
+        "responses": {
+          "200": {
+            "description": "HTML body"
+          },
+          "404": {
+            "description": "No such email"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Email id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    }
+  }
+}
