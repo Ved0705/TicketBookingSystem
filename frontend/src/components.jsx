@@ -9,37 +9,37 @@ export function Masthead() {
   const link = ({ isActive }) => (isActive ? 'active' : undefined);
 
   return (
-    <header className="masthead">
-      <div className="masthead-inner">
-        <NavLink to="/" className="wordmark">
-          <span className="wordmark-mark" aria-hidden="true" />
-          Box Office
-        </NavLink>
-        <nav className="nav">
-          <NavLink to="/events" className={link}>Events</NavLink>
-          {user?.role === 'CUSTOMER' && (
-            <>
-              <NavLink to="/dashboard" className={link}>Dashboard</NavLink>
-              <NavLink to="/bookings" className={link}>Bookings</NavLink>
-              <NavLink to="/waitlist" className={link}>Waitlist</NavLink>
-            </>
-          )}
-          {user?.role === 'ORGANISER' && <NavLink to="/organiser" className={link}>Organiser</NavLink>}
-          {user?.role === 'ADMIN' && <NavLink to="/admin" className={link}>Admin</NavLink>}
-          {user ? (
-            <>
-              <span className="faint">{user.name}</span>
-              <button type="button" className="btn btn-quiet btn-sm" onClick={logout}>Sign out</button>
-            </>
-          ) : (
-            <>
-              <NavLink to="/login" className={link}>Sign in</NavLink>
-              <NavLink to="/register" className="btn btn-sm">Create account</NavLink>
-            </>
-          )}
-        </nav>
-      </div>
-    </header>
+      <header className="masthead">
+        <div className="masthead-inner">
+          <NavLink to="/" className="wordmark">
+            <span className="wordmark-mark" aria-hidden="true" />
+            Box Office
+          </NavLink>
+          <nav className="nav">
+            <NavLink to="/events" className={link}>Events</NavLink>
+            {user?.role === 'CUSTOMER' && (
+                <>
+                  <NavLink to="/dashboard" className={link}>Dashboard</NavLink>
+                  <NavLink to="/bookings" className={link}>Bookings</NavLink>
+                  <NavLink to="/waitlist" className={link}>Waitlist</NavLink>
+                </>
+            )}
+            {user?.role === 'ORGANISER' && <NavLink to="/organiser" className={link}>Organiser</NavLink>}
+            {user?.role === 'ADMIN' && <NavLink to="/admin" className={link}>Admin</NavLink>}
+            {user ? (
+                <>
+                  <span className="faint">{user.name}</span>
+                  <button type="button" className="btn btn-quiet btn-sm" onClick={logout}>Sign out</button>
+                </>
+            ) : (
+                <>
+                  <NavLink to="/login" className={link}>Sign in</NavLink>
+                  <NavLink to="/register" className="btn btn-sm">Create account</NavLink>
+                </>
+            )}
+          </nav>
+        </div>
+      </header>
   );
 }
 
@@ -52,40 +52,40 @@ export function Protected({ roles, children }) {
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (roles && !roles.includes(user.role)) {
     return (
-      <div className="page page-narrow">
-        <p className="eyebrow">Wrong account type</p>
-        <h1>This area is for {roles.join(' and ').toLowerCase()} accounts</h1>
-        <p className="muted">You are signed in as {user.name} ({user.role.toLowerCase()}).</p>
-      </div>
+        <div className="page page-narrow">
+          <p className="eyebrow">Wrong account type</p>
+          <h1>This area is for {roles.join(' and ').toLowerCase()} accounts</h1>
+          <p className="muted">You are signed in as {user.name} ({user.role.toLowerCase()}).</p>
+        </div>
     );
   }
   return children;
 }
 
 export const Notice = ({ kind = 'error', children }) =>
-  children ? <div className={`notice notice-${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div> : null;
+    children ? <div className={`notice notice-${kind}`} role={kind === 'error' ? 'alert' : 'status'}>{children}</div> : null;
 
 export const Empty = ({ title, children }) => (
-  <div className="empty">
-    <h3>{title}</h3>
-    {children && <p className="muted" style={{ margin: '6px 0 0' }}>{children}</p>}
-  </div>
+    <div className="empty">
+      <h3>{title}</h3>
+      {children && <p className="muted" style={{ margin: '6px 0 0' }}>{children}</p>}
+    </div>
 );
 
 export const Stat = ({ label, value }) => (
-  <div className="stat">
-    <div className="stat-value">{value}</div>
-    <div className="stat-label">{label}</div>
-  </div>
+    <div className="stat">
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
+    </div>
 );
 
 /** A field wrapper that surfaces server-side per-field validation messages. */
 export const Field = ({ label, error, children }) => (
-  <div className="field">
-    <label>{label}</label>
-    {children}
-    {error && <div className="field-error">{error}</div>}
-  </div>
+    <div className="field">
+      <label>{label}</label>
+      {children}
+      {error && <div className="field-error">{error}</div>}
+    </div>
 );
 
 export function Countdown({ expiresAt, onExpire }) {
@@ -154,13 +154,12 @@ export function useSeatSocket(showId, { onSeats, onOffer } = {}) {
 
 /* -------------------------------------------------------------- seat map */
 
-// Kept in step with the seat colours in styles.css.
 const LEGEND = [
-  { key: 'available', label: 'Available', border: '#3c466b', bg: '#222941' },
-  { key: 'selected', label: 'Your selection', border: '#ffd977', bg: '#f0b429' },
-  { key: 'held', label: 'Held by someone', border: '#ffae5c', bg: '#f0932b' },
-  { key: 'booked', label: 'Booked', border: '#5a6480', bg: '#4b5570' },
-  { key: 'offered', label: 'Reserved for waitlist', border: '#b9a1ff', bg: '#9b7bf0' },
+  { key: 'available', label: 'Available', border: '#79838d', bg: 'transparent' },
+  { key: 'selected', label: 'Your selection', border: '#2f9c74', bg: '#17654a' },
+  { key: 'held', label: 'Held by someone', border: '#a8681c', bg: '#a8681c' },
+  { key: 'booked', label: 'Booked', border: '#5a6068', bg: '#5a6068' },
+  { key: 'offered', label: 'Reserved for waitlist', border: '#5b4a91', bg: '#5b4a91' },
 ];
 
 /**
@@ -180,8 +179,8 @@ export function SeatMap({ seats, selected = [], mine = [], onToggle, live }) {
       category,
       price: rows.values().next().value?.[0]?.price ?? 0,
       rows: [...rows.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([row, list]) => ({ row, seats: list.sort((a, b) => a.number - b.number) })),
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([row, list]) => ({ row, seats: list.sort((a, b) => a.number - b.number) })),
     }));
   }, [seats]);
 
@@ -205,54 +204,54 @@ export function SeatMap({ seats, selected = [], mine = [], onToggle, live }) {
   };
 
   return (
-    <div>
-      <div className="auditorium">
-        <div className="screen"><span>Screen / Stage</span></div>
+      <div>
+        <div className="auditorium">
+          <div className="screen"><span>Screen / Stage</span></div>
 
-        {grouped.map(({ category, rows }) => (
-          <div key={category}>
-            <div className="category-band">{category}</div>
-            <div className="seat-rows">
-              {rows.map(({ row, seats: rowSeats }) => (
-                <div className="seat-row" key={row}>
-                  <span className="row-label">{row}</span>
-                  {rowSeats.map((seat, i) => (
-                    <span key={seat.id} style={{ display: 'contents' }}>
+          {grouped.map(({ category, rows }) => (
+              <div key={category}>
+                <div className="category-band">{category}</div>
+                <div className="seat-rows">
+                  {rows.map(({ row, seats: rowSeats }) => (
+                      <div className="seat-row" key={row}>
+                        <span className="row-label">{row}</span>
+                        {rowSeats.map((seat, i) => (
+                            <span key={seat.id} style={{ display: 'contents' }}>
                       {i > 0 && i % 6 === 0 && <span className="seat-gap" aria-hidden="true" />}
-                      <button
-                        type="button"
-                        className={`seat ${classFor(seat)}`}
-                        disabled={seat.status !== 'AVAILABLE' && !mineSet.has(seat.id)}
-                        onClick={() => seat.status === 'AVAILABLE' && onToggle?.(seat)}
-                        aria-pressed={selectedSet.has(seat.id)}
-                        aria-label={labelFor(seat)}
-                        title={labelFor(seat)}
-                      >
+                              <button
+                                  type="button"
+                                  className={`seat ${classFor(seat)}`}
+                                  disabled={seat.status !== 'AVAILABLE' && !mineSet.has(seat.id)}
+                                  onClick={() => seat.status === 'AVAILABLE' && onToggle?.(seat)}
+                                  aria-pressed={selectedSet.has(seat.id)}
+                                  aria-label={labelFor(seat)}
+                                  title={labelFor(seat)}
+                              >
                         {seat.number}
                       </button>
                     </span>
+                        ))}
+                        <span className="row-label">{row}</span>
+                      </div>
                   ))}
-                  <span className="row-label">{row}</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        <div className="legend">
-          {LEGEND.map((l) => (
-            <span className="legend-item" key={l.key}>
-              <span className="legend-swatch" style={{ background: l.bg, borderColor: l.border }} />
-              {l.label}
-            </span>
+              </div>
           ))}
-        </div>
-      </div>
 
-      <p className="faint" style={{ marginTop: 10 }}>
-        <span className={`live-dot ${live ? '' : 'off'}`} />{' '}
-        {live ? 'Live — seats update as other people book' : 'Reconnecting to live updates…'}
-      </p>
-    </div>
+          <div className="legend">
+            {LEGEND.map((l) => (
+                <span className="legend-item" key={l.key}>
+              <span className="legend-swatch" style={{ background: l.bg, borderColor: l.border }} />
+                  {l.label}
+            </span>
+            ))}
+          </div>
+        </div>
+
+        <p className="faint" style={{ marginTop: 10 }}>
+          <span className={`live-dot ${live ? '' : 'off'}`} />{' '}
+          {live ? 'Live — seats update as other people book' : 'Reconnecting to live updates…'}
+        </p>
+      </div>
   );
 }

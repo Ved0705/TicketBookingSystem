@@ -4,7 +4,7 @@ import { useAuth } from '../lib.jsx';
 import { Field, Notice } from '../components.jsx';
 
 const landingFor = (role) =>
-  role === 'ADMIN' ? '/admin' : role === 'ORGANISER' ? '/organiser' : '/dashboard';
+    role === 'ADMIN' ? '/admin' : role === 'ORGANISER' ? '/organiser' : '/dashboard';
 
 /** Role gates, mirroring the route guards in App.jsx. */
 const GATES = [
@@ -52,41 +52,27 @@ export function Login() {
   };
 
   return (
-    <div className="page page-narrow">
-      <p className="eyebrow">Welcome back</p>
-      <h1>Sign in</h1>
+      <div className="page page-narrow">
+        <p className="eyebrow">Welcome back</p>
+        <h1>Sign in</h1>
 
-      <form className="card" onSubmit={submit} style={{ marginTop: 16 }}>
-        <Notice>{error}</Notice>
-        <Field label="Email">
-          <input type="email" value={email} required autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)} />
-        </Field>
-        <Field label="Password">
-          <input type="password" value={password} required autoComplete="current-password"
-            onChange={(e) => setPassword(e.target.value)} />
-        </Field>
-        <button className="btn btn-block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-      </form>
+        <form className="card" onSubmit={submit} style={{ marginTop: 16 }}>
+          <Notice>{error}</Notice>
+          <Field label="Email">
+            <input type="email" value={email} required autoComplete="email"
+                   onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label="Password">
+            <input type="password" value={password} required autoComplete="current-password"
+                   onChange={(e) => setPassword(e.target.value)} />
+          </Field>
+          <button className="btn btn-block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        </form>
 
-      <p className="muted" style={{ marginTop: 14 }}>
-        No account yet? <Link to="/register">Create one</Link>.
-      </p>
-
-      <div className="card" style={{ marginTop: 18 }}>
-        <p className="eyebrow">Demo accounts (after running the seed)</p>
-        <table>
-          <tbody>
-            <tr><td className="mono">customer@tbs.local</td><td className="faint">Customer</td></tr>
-            <tr><td className="mono">organiser@tbs.local</td><td className="faint">Organiser</td></tr>
-            <tr><td className="mono">admin@tbs.local</td><td className="faint">Admin</td></tr>
-          </tbody>
-        </table>
-        <p className="faint" style={{ marginBottom: 0 }}>
-          Password for all seeded accounts: <span className="mono">Password123!</span>
+        <p className="muted" style={{ marginTop: 14 }}>
+          No account yet? <Link to="/register">Create one</Link>.
         </p>
       </div>
-    </div>
   );
 }
 
@@ -117,35 +103,35 @@ export function Register() {
   };
 
   return (
-    <div className="page page-narrow">
-      <p className="eyebrow">Join</p>
-      <h1>Create your account</h1>
+      <div className="page page-narrow">
+        <p className="eyebrow">Join</p>
+        <h1>Create your account</h1>
 
-      <form className="card" onSubmit={submit} style={{ marginTop: 16 }}>
-        <Notice>{error}</Notice>
-        <Field label="Name" error={details.name}>
-          <input value={form.name} required onChange={set('name')} autoComplete="name" />
-        </Field>
-        <Field label="Email" error={details.email}>
-          <input type="email" value={form.email} required onChange={set('email')} autoComplete="email" />
-        </Field>
-        <Field label="Password" error={details.password}>
-          <input type="password" value={form.password} required minLength={8}
-            onChange={set('password')} autoComplete="new-password" />
-          <p className="faint" style={{ margin: '4px 0 0' }}>At least 8 characters.</p>
-        </Field>
-        <Field label="I am signing up as">
-          <select value={form.role} onChange={set('role')}>
-            <option value="CUSTOMER">A customer booking tickets</option>
-            <option value="ORGANISER">An organiser listing events</option>
-          </select>
-        </Field>
-        <button className="btn btn-block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
-      </form>
+        <form className="card" onSubmit={submit} style={{ marginTop: 16 }}>
+          <Notice>{error}</Notice>
+          <Field label="Name" error={details.name}>
+            <input value={form.name} required onChange={set('name')} autoComplete="name" />
+          </Field>
+          <Field label="Email" error={details.email}>
+            <input type="email" value={form.email} required onChange={set('email')} autoComplete="email" />
+          </Field>
+          <Field label="Password" error={details.password}>
+            <input type="password" value={form.password} required minLength={8}
+                   onChange={set('password')} autoComplete="new-password" />
+            <p className="faint" style={{ margin: '4px 0 0' }}>At least 8 characters.</p>
+          </Field>
+          <Field label="I am signing up as">
+            <select value={form.role} onChange={set('role')}>
+              <option value="CUSTOMER">A customer booking tickets</option>
+              <option value="ORGANISER">An organiser listing events</option>
+            </select>
+          </Field>
+          <button className="btn btn-block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
+        </form>
 
-      <p className="muted" style={{ marginTop: 14 }}>
-        Already registered? <Link to="/login">Sign in</Link>.
-      </p>
-    </div>
+        <p className="muted" style={{ marginTop: 14 }}>
+          Already registered? <Link to="/login">Sign in</Link>.
+        </p>
+      </div>
   );
 }

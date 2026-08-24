@@ -25,8 +25,8 @@ export default function Waitlist() {
   const [notice, setNotice] = useState('');
 
   const load = useCallback(
-    () => api.get('/api/waitlist').then((d) => setEntries(d.entries)).catch((err) => setError(err.message)),
-    []
+      () => api.get('/api/waitlist').then((d) => setEntries(d.entries)).catch((err) => setError(err.message)),
+      []
   );
 
   useEffect(() => {
@@ -70,91 +70,91 @@ export default function Waitlist() {
   };
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <p className="eyebrow">Sold-out shows</p>
-          <h1>Your waitlists</h1>
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <p className="eyebrow">Sold-out shows</p>
+            <h1>Your waitlists</h1>
+          </div>
+          <Link className="btn btn-quiet btn-sm" to="/events">Browse events</Link>
         </div>
-        <Link className="btn btn-quiet btn-sm" to="/events">Browse events</Link>
-      </div>
 
-      {notice && <div className="notice notice-ok" style={{ marginBottom: 14 }}>{notice}</div>}
-      <Notice>{error}</Notice>
+        {notice && <div className="notice notice-ok" style={{ marginBottom: 14 }}>{notice}</div>}
+        <Notice>{error}</Notice>
 
-      {entries === null ? (
-        <p className="skeleton">Loading…</p>
-      ) : entries.length === 0 ? (
-        <Empty title="You are not on any waitlist">
-          When a seat category is sold out, you can join its queue from the seat map.
-        </Empty>
-      ) : (
-        <div className="grid grid-2">
-          {entries.map((e) => (
-            <div className="card" key={e.waitlistId}>
-              <div className="spread">
-                <div>
-                  <h3 style={{ marginBottom: 2 }}>{e.show.eventTitle}</h3>
-                  <p className="faint" style={{ margin: 0 }}>
-                    {dateTime(e.show.startsAt)} · {e.show.venue.name}
-                  </p>
-                </div>
-                <span className={STATUS_TAG[e.status] || 'tag'}>{e.status}</span>
-              </div>
+        {entries === null ? (
+            <p className="skeleton">Loading…</p>
+        ) : entries.length === 0 ? (
+            <Empty title="You are not on any waitlist">
+              When a seat category is sold out, you can join its queue from the seat map.
+            </Empty>
+        ) : (
+            <div className="grid grid-2">
+              {entries.map((e) => (
+                  <div className="card" key={e.waitlistId}>
+                    <div className="spread">
+                      <div>
+                        <h3 style={{ marginBottom: 2 }}>{e.show.eventTitle}</h3>
+                        <p className="faint" style={{ margin: 0 }}>
+                          {dateTime(e.show.startsAt)} · {e.show.venue.name}
+                        </p>
+                      </div>
+                      <span className={STATUS_TAG[e.status] || 'tag'}>{e.status}</span>
+                    </div>
 
-              <p className="muted" style={{ margin: '10px 0 0' }}>{e.category}</p>
+                    <p className="muted" style={{ margin: '10px 0 0' }}>{e.category}</p>
 
-              {e.status === 'WAITING' && (
-                <div className="row" style={{ marginTop: 12, alignItems: 'flex-end' }}>
-                  <div>
-                    <span className="queue-position">#{e.position}</span>
-                    <p className="faint" style={{ margin: '4px 0 0' }}>
-                      {e.peopleAhead === 0
-                        ? 'You are next in line'
-                        : `${e.peopleAhead} ${e.peopleAhead === 1 ? 'person' : 'people'} ahead of you`}
-                    </p>
-                  </div>
-                  <button type="button" className="btn btn-quiet btn-sm" style={{ marginLeft: 'auto' }}
-                    onClick={() => leave(e.waitlistId)}>
-                    Leave queue
-                  </button>
-                </div>
-              )}
+                    {e.status === 'WAITING' && (
+                        <div className="row" style={{ marginTop: 12, alignItems: 'flex-end' }}>
+                          <div>
+                            <span className="queue-position">#{e.position}</span>
+                            <p className="faint" style={{ margin: '4px 0 0' }}>
+                              {e.peopleAhead === 0
+                                  ? 'You are next in line'
+                                  : `${e.peopleAhead} ${e.peopleAhead === 1 ? 'person' : 'people'} ahead of you`}
+                            </p>
+                          </div>
+                          <button type="button" className="btn btn-quiet btn-sm" style={{ marginLeft: 'auto' }}
+                                  onClick={() => leave(e.waitlistId)}>
+                            Leave queue
+                          </button>
+                        </div>
+                    )}
 
-              {e.offer && (
-                <div className="notice notice-info" style={{ marginTop: 12 }}>
-                  <div className="spread">
+                    {e.offer && (
+                        <div className="notice notice-info" style={{ marginTop: 12 }}>
+                          <div className="spread">
                     <span>
                       Seat <span className="mono">{e.offer.seatLabel}</span> is reserved for you.
                     </span>
-                    <Countdown expiresAt={e.offer.expiresAt} onExpire={load} />
-                  </div>
-                  <div className="row" style={{ marginTop: 10 }}>
-                    <button type="button" className="btn btn-sm" onClick={() => accept(e.offer.id)}>
-                      Accept and check out
-                    </button>
-                    <button type="button" className="btn btn-quiet btn-sm" onClick={() => decline(e.offer.id)}>
-                      No thanks
-                    </button>
-                  </div>
-                </div>
-              )}
+                            <Countdown expiresAt={e.offer.expiresAt} onExpire={load} />
+                          </div>
+                          <div className="row" style={{ marginTop: 10 }}>
+                            <button type="button" className="btn btn-sm" onClick={() => accept(e.offer.id)}>
+                              Accept and check out
+                            </button>
+                            <button type="button" className="btn btn-quiet btn-sm" onClick={() => decline(e.offer.id)}>
+                              No thanks
+                            </button>
+                          </div>
+                        </div>
+                    )}
 
-              {e.status === 'EXPIRED' && (
-                <p className="faint" style={{ marginTop: 10, marginBottom: 0 }}>
-                  Your offer ran out of time and the seat moved on to the next person.
-                  You can join the queue again from the seat map.
-                </p>
-              )}
-              {e.status === 'FULFILLED' && (
-                <p className="faint" style={{ marginTop: 10, marginBottom: 0 }}>
-                  You took this seat — it is in <Link to="/bookings">your bookings</Link>.
-                </p>
-              )}
+                    {e.status === 'EXPIRED' && (
+                        <p className="faint" style={{ marginTop: 10, marginBottom: 0 }}>
+                          Your offer ran out of time and the seat moved on to the next person.
+                          You can join the queue again from the seat map.
+                        </p>
+                    )}
+                    {e.status === 'FULFILLED' && (
+                        <p className="faint" style={{ marginTop: 10, marginBottom: 0 }}>
+                          You took this seat — it is in <Link to="/bookings">your bookings</Link>.
+                        </p>
+                    )}
+                  </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
   );
 }

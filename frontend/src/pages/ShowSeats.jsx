@@ -62,13 +62,13 @@ export default function ShowSeats() {
   const toggle = (seat) => {
     setError('');
     setSelected((prev) =>
-      prev.includes(seat.id) ? prev.filter((id) => id !== seat.id) : [...prev, seat.id]
+        prev.includes(seat.id) ? prev.filter((id) => id !== seat.id) : [...prev, seat.id]
     );
   };
 
   const selectedSeats = useMemo(
-    () => (map ? map.seats.filter((s) => selected.includes(s.id)) : []),
-    [map, selected]
+      () => (map ? map.seats.filter((s) => selected.includes(s.id)) : []),
+      [map, selected]
   );
   const total = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 
@@ -105,108 +105,108 @@ export default function ShowSeats() {
   const isCustomer = user?.role === 'CUSTOMER';
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <p className="eyebrow">{dateTime(map.show.startsAt)} · {map.show.venue.name}, {map.show.venue.city}</p>
-          <h1>{map.show.eventTitle}</h1>
-        </div>
-      </div>
-
-      <div className="split">
-        <div>
-          <SeatMap
-            seats={map.seats}
-            selected={selected}
-            mine={hold?.seatIds || []}
-            onToggle={toggle}
-            live={live}
-          />
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <p className="eyebrow">{dateTime(map.show.startsAt)} · {map.show.venue.name}, {map.show.venue.city}</p>
+            <h1>{map.show.eventTitle}</h1>
+          </div>
         </div>
 
-        <aside className="sticky-side stack">
-          {hold && (
-            <div className="card">
-              <p className="eyebrow">Seats held for you</p>
-              <Countdown expiresAt={hold.expiresAt} onExpire={() => { setHold(null); load(); }} />
-              <p className="faint" style={{ margin: '6px 0 10px' }}>
-                {hold.seatIds.length} seat{hold.seatIds.length === 1 ? '' : 's'} reserved until checkout.
-              </p>
-              <button type="button" className="btn btn-block" onClick={() => navigate(`/checkout/${hold.holdId}`)}>
-                Go to checkout
-              </button>
-            </div>
-          )}
-
-          <div className="card">
-            <p className="eyebrow">Your selection</p>
-            {selectedSeats.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                Pick any available seat from the plan to get started.
-              </p>
-            ) : (
-              <>
-                <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: '0 0 12px' }}>
-                  {selectedSeats.map((s) => (
-                    <li key={s.id} className="spread">
-                      <span><span className="mono">{s.label}</span> <span className="faint">{s.category}</span></span>
-                      <span className="mono">{money(s.price)}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="spread" style={{ borderTop: '1px solid var(--rule)', paddingTop: 10 }}>
-                  <strong>Total</strong>
-                  <strong className="mono">{money(total)}</strong>
-                </div>
-              </>
-            )}
-
-            <Notice>{error}</Notice>
-
-            {isCustomer ? (
-              <button
-                type="button"
-                className="btn btn-block"
-                style={{ marginTop: 12 }}
-                disabled={selected.length === 0 || busy}
-                onClick={placeHold}
-              >
-                {busy ? 'Holding…' : `Hold ${selected.length || ''} seat${selected.length === 1 ? '' : 's'}`.trim()}
-              </button>
-            ) : (
-              <p className="faint" style={{ marginTop: 12, marginBottom: 0 }}>
-                {user ? 'Only customer accounts can book seats.' : 'Sign in as a customer to hold seats.'}
-              </p>
-            )}
-            <p className="faint" style={{ marginTop: 8, marginBottom: 0 }}>
-              Held seats are yours for {Math.round(map.holdTtlSeconds / 60)} minutes.
-            </p>
+        <div className="split">
+          <div>
+            <SeatMap
+                seats={map.seats}
+                selected={selected}
+                mine={hold?.seatIds || []}
+                onToggle={toggle}
+                live={live}
+            />
           </div>
 
-          <div className="card">
-            <p className="eyebrow">Availability</p>
-            {info && <div className="notice notice-ok" style={{ marginBottom: 10 }}>{info}</div>}
-            <div className="stack">
-              {map.categories.map((c) => (
-                <div key={c.id} className="spread">
+          <aside className="sticky-side stack">
+            {hold && (
+                <div className="card">
+                  <p className="eyebrow">Seats held for you</p>
+                  <Countdown expiresAt={hold.expiresAt} onExpire={() => { setHold(null); load(); }} />
+                  <p className="faint" style={{ margin: '6px 0 10px' }}>
+                    {hold.seatIds.length} seat{hold.seatIds.length === 1 ? '' : 's'} reserved until checkout.
+                  </p>
+                  <button type="button" className="btn btn-block" onClick={() => navigate(`/checkout/${hold.holdId}`)}>
+                    Go to checkout
+                  </button>
+                </div>
+            )}
+
+            <div className="card">
+              <p className="eyebrow">Your selection</p>
+              {selectedSeats.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>
+                    Pick any available seat from the plan to get started.
+                  </p>
+              ) : (
+                  <>
+                    <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: '0 0 12px' }}>
+                      {selectedSeats.map((s) => (
+                          <li key={s.id} className="spread">
+                            <span><span className="mono">{s.label}</span> <span className="faint">{s.category}</span></span>
+                            <span className="mono">{money(s.price)}</span>
+                          </li>
+                      ))}
+                    </ul>
+                    <div className="spread" style={{ borderTop: '1px solid var(--rule)', paddingTop: 10 }}>
+                      <strong>Total</strong>
+                      <strong className="mono">{money(total)}</strong>
+                    </div>
+                  </>
+              )}
+
+              <Notice>{error}</Notice>
+
+              {isCustomer ? (
+                  <button
+                      type="button"
+                      className="btn btn-block"
+                      style={{ marginTop: 12 }}
+                      disabled={selected.length === 0 || busy}
+                      onClick={placeHold}
+                  >
+                    {busy ? 'Holding…' : `Hold ${selected.length || ''} seat${selected.length === 1 ? '' : 's'}`.trim()}
+                  </button>
+              ) : (
+                  <p className="faint" style={{ marginTop: 12, marginBottom: 0 }}>
+                    {user ? 'Only customer accounts can book seats.' : 'Sign in as a customer to hold seats.'}
+                  </p>
+              )}
+              <p className="faint" style={{ marginTop: 8, marginBottom: 0 }}>
+                Held seats are yours for {Math.round(map.holdTtlSeconds / 60)} minutes.
+              </p>
+            </div>
+
+            <div className="card">
+              <p className="eyebrow">Availability</p>
+              {info && <div className="notice notice-ok" style={{ marginBottom: 10 }}>{info}</div>}
+              <div className="stack">
+                {map.categories.map((c) => (
+                    <div key={c.id} className="spread">
                   <span>
                     {c.name} <span className="faint">{money(c.price)}</span>
                   </span>
-                  {c.soldOut ? (
-                    isCustomer ? (
-                      <button type="button" className="btn btn-quiet btn-sm" onClick={() => joinWaitlist(c.id)}>
-                        Join waitlist
-                      </button>
-                    ) : <span className="tag tag-stop">Sold out</span>
-                  ) : (
-                    <span className="faint">{c.available} of {c.total} free</span>
-                  )}
-                </div>
-              ))}
+                      {c.soldOut ? (
+                          isCustomer ? (
+                              <button type="button" className="btn btn-quiet btn-sm" onClick={() => joinWaitlist(c.id)}>
+                                Join waitlist
+                              </button>
+                          ) : <span className="tag tag-stop">Sold out</span>
+                      ) : (
+                          <span className="faint">{c.available} of {c.total} free</span>
+                      )}
+                    </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        </div>
       </div>
-    </div>
   );
 }

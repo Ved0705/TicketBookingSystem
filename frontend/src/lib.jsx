@@ -54,10 +54,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!getToken()) { setReady(true); return; }
     api
-      .get('/api/auth/me')
-      .then((d) => setUser(d.user))
-      .catch(() => setToken(null))
-      .finally(() => setReady(true));
+        .get('/api/auth/me')
+        .then((d) => setUser(d.user))
+        .catch(() => setToken(null))
+        .finally(() => setReady(true));
   }, []);
 
   const login = useCallback(async (email, password) => {
@@ -80,8 +80,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, login, register, logout }),
-    [user, ready, login, register, logout]
+      () => ({ user, ready, login, register, logout }),
+      [user, ready, login, register, logout]
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -95,16 +95,16 @@ export function useAuth() {
 /* --------------------------------------------------------------- helpers */
 
 export const money = (n) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
-    .format(Number(n || 0));
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+        .format(Number(n || 0));
 
 export const dateTime = (iso) =>
-  new Date(iso).toLocaleString(undefined, {
-    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-  });
+    new Date(iso).toLocaleString(undefined, {
+      weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
 
 export const dateOnly = (iso) =>
-  new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 /** Countdown to an ISO timestamp, ticking once a second. Returns mm:ss. */
 export function useCountdown(expiresAt) {
