@@ -15,8 +15,8 @@ const S = {
     SELECT sh.*, e.title AS event_title, e.id AS event_id, e.type AS event_type,
            v.name AS venue_name, v.city AS venue_city, v.id AS venue_id
     FROM shows sh
-    JOIN events e ON e.id = sh.event_id
-    JOIN venues v ON v.id = sh.venue_id
+           JOIN events e ON e.id = sh.event_id
+           JOIN venues v ON v.id = sh.venue_id
     WHERE sh.id = ?`),
 
   seatMap: db.prepare(`
@@ -25,9 +25,9 @@ const S = {
            c.name AS category, c.rank AS category_rank,
            sp.price
     FROM show_seats ss
-    JOIN seats s ON s.id = ss.seat_id
-    JOIN seat_categories c ON c.id = ss.category_id
-    LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
+           JOIN seats s ON s.id = ss.seat_id
+           JOIN seat_categories c ON c.id = ss.category_id
+           LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
     WHERE ss.show_id = ?
     ORDER BY c.rank, s.row_label, s.seat_number`),
 
@@ -36,14 +36,14 @@ const S = {
            s.row_label, s.seat_number, c.name AS category,
            sp.price
     FROM show_seats ss
-    JOIN seats s ON s.id = ss.seat_id
-    JOIN seat_categories c ON c.id = ss.category_id
-    LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
+           JOIN seats s ON s.id = ss.seat_id
+           JOIN seat_categories c ON c.id = ss.category_id
+           LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
     WHERE ss.id IN (${Array(n).fill('?').join(',')})`),
 };
 
 const nextPositionStmt = db.prepare(
-  `SELECT COALESCE(MAX(position), 0) + 1 AS pos FROM waitlists WHERE show_id = ? AND category_id = ?`
+    `SELECT COALESCE(MAX(position), 0) + 1 AS pos FROM waitlists WHERE show_id = ? AND category_id = ?`
 );
 
 /* ====================================================================
@@ -68,22 +68,22 @@ export function sweepExpired() {
   const work = db.transaction(() => {
     // ---- 1. Expired seat holds -------------------------------------
     const staleHolds = db
-      .prepare(`SELECT * FROM seat_holds WHERE status = 'ACTIVE' AND expires_at <= ?`)
-      .all(now);
+        .prepare(`SELECT * FROM seat_holds WHERE status = 'ACTIVE' AND expires_at <= ?`)
+        .all(now);
 
     for (const hold of staleHolds) {
       const seats = db
-        .prepare(`SELECT id, show_id, category_id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
-        .all(hold.id);
+          .prepare(`SELECT id, show_id, category_id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
+          .all(hold.id);
 
       db.prepare(`UPDATE seat_holds SET status = 'EXPIRED' WHERE id = ? AND status = 'ACTIVE'`)
-        .run(hold.id);
+          .run(hold.id);
 
       for (const seat of seats) {
         db.prepare(
-          `UPDATE show_seats
-              SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
-            WHERE id = ? AND status = 'HELD'`
+            `UPDATE show_seats
+             SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
+             WHERE id = ? AND status = 'HELD'`
         ).run(seat.id);
         touchedSeatIds.add(seat.id);
 
@@ -98,24 +98,24 @@ export function sweepExpired() {
 
     // ---- 2. Expired waitlist offers --------------------------------
     const staleOffers = db
-      .prepare(`SELECT * FROM waitlist_offers WHERE status = 'PENDING' AND expires_at <= ?`)
-      .all(now);
+        .prepare(`SELECT * FROM waitlist_offers WHERE status = 'PENDING' AND expires_at <= ?`)
+        .all(now);
 
     for (const offer of staleOffers) {
       db.prepare(`UPDATE waitlist_offers SET status = 'EXPIRED' WHERE id = ? AND status = 'PENDING'`)
-        .run(offer.id);
+          .run(offer.id);
       db.prepare(`UPDATE waitlists SET status = 'EXPIRED' WHERE id = ? AND status = 'OFFERED'`)
-        .run(offer.waitlist_id);
+          .run(offer.waitlist_id);
 
       const seat = db
-        .prepare(`SELECT id, show_id, category_id, status FROM show_seats WHERE id = ?`)
-        .get(offer.show_seat_id);
+          .prepare(`SELECT id, show_id, category_id, status FROM show_seats WHERE id = ?`)
+          .get(offer.show_seat_id);
       if (!seat) continue;
 
       if (seat.status === 'OFFERED') {
         db.prepare(
-          `UPDATE show_seats SET status = 'AVAILABLE', offer_id = NULL, version = version + 1
-            WHERE id = ? AND status = 'OFFERED'`
+            `UPDATE show_seats SET status = 'AVAILABLE', offer_id = NULL, version = version + 1
+             WHERE id = ? AND status = 'OFFERED'`
         ).run(seat.id);
         touchedSeatIds.add(seat.id);
 
@@ -141,10 +141,10 @@ function collectSeatBroadcast(seatIds) {
   if (seatIds.size === 0) return byShow;
   const ids = [...seatIds];
   const rows = db
-    .prepare(
-      `SELECT id, show_id, status FROM show_seats WHERE id IN (${ids.map(() => '?').join(',')})`
-    )
-    .all(...ids);
+      .prepare(
+          `SELECT id, show_id, status FROM show_seats WHERE id IN (${ids.map(() => '?').join(',')})`
+      )
+      .all(...ids);
   for (const r of rows) {
     if (!byShow.has(r.show_id)) byShow.set(r.show_id, []);
     byShow.get(r.show_id).push({ id: r.id, status: r.status });
@@ -174,33 +174,33 @@ export function getSeatMap(showId, viewerId = null) {
   }));
 
   const categories = db
-    .prepare(
-      `SELECT c.id, c.name, c.rank, COALESCE(sp.price, 0) AS price,
-              SUM(CASE WHEN ss.status = 'AVAILABLE' THEN 1 ELSE 0 END) AS available,
-              COUNT(ss.id) AS total
-         FROM show_seats ss
-         JOIN seat_categories c ON c.id = ss.category_id
-         LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = c.id
-        WHERE ss.show_id = ?
-        GROUP BY c.id
-        ORDER BY c.rank`
-    )
-    .all(showId);
+      .prepare(
+          `SELECT c.id, c.name, c.rank, COALESCE(sp.price, 0) AS price,
+                  SUM(CASE WHEN ss.status = 'AVAILABLE' THEN 1 ELSE 0 END) AS available,
+                  COUNT(ss.id) AS total
+           FROM show_seats ss
+                  JOIN seat_categories c ON c.id = ss.category_id
+                  LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = c.id
+           WHERE ss.show_id = ?
+           GROUP BY c.id
+           ORDER BY c.rank`
+      )
+      .all(showId);
 
   let myHold = null;
   if (viewerId) {
     const hold = db
-      .prepare(
-        `SELECT * FROM seat_holds
-          WHERE user_id = ? AND show_id = ? AND status = 'ACTIVE' AND expires_at > ?
-          ORDER BY id DESC LIMIT 1`
-      )
-      .get(viewerId, showId, nowIso());
+        .prepare(
+            `SELECT * FROM seat_holds
+             WHERE user_id = ? AND show_id = ? AND status = 'ACTIVE' AND expires_at > ?
+             ORDER BY id DESC LIMIT 1`
+        )
+        .get(viewerId, showId, nowIso());
     if (hold) {
       const heldSeats = db
-        .prepare(`SELECT id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
-        .all(hold.id)
-        .map((r) => r.id);
+          .prepare(`SELECT id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
+          .all(hold.id)
+          .map((r) => r.id);
       myHold = { holdId: hold.id, expiresAt: hold.expires_at, seatIds: heldSeats };
     }
   }
@@ -274,29 +274,29 @@ export function holdSeats({ userId, showId, seatIds, ttlSeconds }) {
     releaseActiveHoldsForUser(userId, showId);
 
     const holdId = db
-      .prepare(
-        `INSERT INTO seat_holds (show_id, user_id, status, expires_at, source)
-         VALUES (?, ?, 'ACTIVE', ?, 'SELECTION')`
-      )
-      .run(showId, userId, expiresAt).lastInsertRowid;
+        .prepare(
+            `INSERT INTO seat_holds (show_id, user_id, status, expires_at, source)
+             VALUES (?, ?, 'ACTIVE', ?, 'SELECTION')`
+        )
+        .run(showId, userId, expiresAt).lastInsertRowid;
 
     const taken = [];
     for (const seat of rows) {
       const res = db
-        .prepare(
-          `UPDATE show_seats
-              SET status = 'HELD', hold_id = ?, version = version + 1
-            WHERE id = ? AND status = 'AVAILABLE'`
-        )
-        .run(holdId, seat.id);
+          .prepare(
+              `UPDATE show_seats
+               SET status = 'HELD', hold_id = ?, version = version + 1
+               WHERE id = ? AND status = 'AVAILABLE'`
+          )
+          .run(holdId, seat.id);
 
       if (res.changes !== 1) {
         // Someone else won this seat between the customer loading the map and
         // pressing "hold". Roll everything back and say so precisely.
         const current = db.prepare(`SELECT status FROM show_seats WHERE id = ?`).get(seat.id);
         throw conflict(
-          `Seat ${seat.row_label}${seat.seat_number} was just taken. Pick another one.`,
-          { seatId: seat.id, status: current?.status || 'UNKNOWN' }
+            `Seat ${seat.row_label}${seat.seat_number} was just taken. Pick another one.`,
+            { seatId: seat.id, status: current?.status || 'UNKNOWN' }
         );
       }
       taken.push(seat);
@@ -308,9 +308,9 @@ export function holdSeats({ userId, showId, seatIds, ttlSeconds }) {
   const result = run.immediate();
 
   publishSeatUpdates(
-    showId,
-    result.seats.map((s) => ({ id: s.id, status: 'HELD' })),
-    'hold'
+      showId,
+      result.seats.map((s) => ({ id: s.id, status: 'HELD' })),
+      'hold'
   );
 
   return {
@@ -331,12 +331,12 @@ export function holdSeats({ userId, showId, seatIds, ttlSeconds }) {
 /** Internal: release a user's active holds for one show (used inside a tx). */
 function releaseActiveHoldsForUser(userId, showId) {
   const holds = db
-    .prepare(`SELECT id FROM seat_holds WHERE user_id = ? AND show_id = ? AND status = 'ACTIVE'`)
-    .all(userId, showId);
+      .prepare(`SELECT id FROM seat_holds WHERE user_id = ? AND show_id = ? AND status = 'ACTIVE'`)
+      .all(userId, showId);
   for (const h of holds) {
     db.prepare(
-      `UPDATE show_seats SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
-        WHERE hold_id = ? AND status = 'HELD'`
+        `UPDATE show_seats SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
+         WHERE hold_id = ? AND status = 'HELD'`
     ).run(h.id);
     db.prepare(`UPDATE seat_holds SET status = 'RELEASED' WHERE id = ?`).run(h.id);
   }
@@ -349,23 +349,23 @@ export function releaseHold({ userId, holdId }) {
   if (hold.user_id !== userId) throw forbidden('That hold belongs to someone else.');
 
   const seatIds = db
-    .prepare(`SELECT id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
-    .all(holdId)
-    .map((r) => r.id);
+      .prepare(`SELECT id FROM show_seats WHERE hold_id = ? AND status = 'HELD'`)
+      .all(holdId)
+      .map((r) => r.id);
 
   db.transaction(() => {
     db.prepare(
-      `UPDATE show_seats SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
-        WHERE hold_id = ? AND status = 'HELD'`
+        `UPDATE show_seats SET status = 'AVAILABLE', hold_id = NULL, version = version + 1
+         WHERE hold_id = ? AND status = 'HELD'`
     ).run(holdId);
     db.prepare(`UPDATE seat_holds SET status = 'RELEASED' WHERE id = ? AND status = 'ACTIVE'`)
-      .run(holdId);
+        .run(holdId);
   }).immediate();
 
   publishSeatUpdates(
-    hold.show_id,
-    seatIds.map((id) => ({ id, status: 'AVAILABLE' })),
-    'hold-released'
+      hold.show_id,
+      seatIds.map((id) => ({ id, status: 'AVAILABLE' })),
+      'hold-released'
   );
   return { released: seatIds.length };
 }
@@ -377,16 +377,16 @@ export function getHold({ userId, holdId }) {
   if (hold.user_id !== userId) throw forbidden('That hold belongs to someone else.');
 
   const seats = db
-    .prepare(
-      `SELECT ss.id, s.row_label, s.seat_number, c.name AS category,
-              COALESCE(sp.price, 0) AS price
-         FROM show_seats ss
-         JOIN seats s ON s.id = ss.seat_id
-         JOIN seat_categories c ON c.id = ss.category_id
-         LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
-        WHERE ss.hold_id = ?`
-    )
-    .all(holdId);
+      .prepare(
+          `SELECT ss.id, s.row_label, s.seat_number, c.name AS category,
+                  COALESCE(sp.price, 0) AS price
+           FROM show_seats ss
+                  JOIN seats s ON s.id = ss.seat_id
+                  JOIN seat_categories c ON c.id = ss.category_id
+                  LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
+           WHERE ss.hold_id = ?`
+      )
+      .all(holdId);
 
   const show = S.showById.get(hold.show_id);
   return {
@@ -427,16 +427,16 @@ export async function confirmBooking({ userId, holdId }) {
     }
 
     const seats = db
-      .prepare(
-        `SELECT ss.id, ss.category_id, s.row_label, s.seat_number, c.name AS category,
-                COALESCE(sp.price, 0) AS price
-           FROM show_seats ss
-           JOIN seats s ON s.id = ss.seat_id
-           JOIN seat_categories c ON c.id = ss.category_id
-           LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
-          WHERE ss.hold_id = ? AND ss.status = 'HELD'`
-      )
-      .all(holdId);
+        .prepare(
+            `SELECT ss.id, ss.category_id, s.row_label, s.seat_number, c.name AS category,
+                    COALESCE(sp.price, 0) AS price
+             FROM show_seats ss
+                    JOIN seats s ON s.id = ss.seat_id
+                    JOIN seat_categories c ON c.id = ss.category_id
+                    LEFT JOIN show_prices sp ON sp.show_id = ss.show_id AND sp.category_id = ss.category_id
+             WHERE ss.hold_id = ? AND ss.status = 'HELD'`
+        )
+        .all(holdId);
 
     if (seats.length === 0) throw conflict('This hold no longer covers any seats.');
 
@@ -444,26 +444,26 @@ export async function confirmBooking({ userId, holdId }) {
     const reference = bookingReference();
 
     const bookingId = db
-      .prepare(
-        `INSERT INTO bookings (reference, user_id, show_id, status, total_amount, qr_payload)
-         VALUES (?, ?, ?, 'CONFIRMED', ?, ?)`
-      )
-      .run(reference, userId, hold.show_id, total, qrPayloadFor(reference)).lastInsertRowid;
+        .prepare(
+            `INSERT INTO bookings (reference, user_id, show_id, status, total_amount, qr_payload)
+             VALUES (?, ?, ?, 'CONFIRMED', ?, ?)`
+        )
+        .run(reference, userId, hold.show_id, total, qrPayloadFor(reference)).lastInsertRowid;
 
     for (const seat of seats) {
       const res = db
-        .prepare(
-          `UPDATE show_seats
-              SET status = 'BOOKED', booking_id = ?, hold_id = NULL, offer_id = NULL,
-                  version = version + 1
-            WHERE id = ? AND status = 'HELD' AND hold_id = ?`
-        )
-        .run(bookingId, seat.id, holdId);
+          .prepare(
+              `UPDATE show_seats
+               SET status = 'BOOKED', booking_id = ?, hold_id = NULL, offer_id = NULL,
+                   version = version + 1
+               WHERE id = ? AND status = 'HELD' AND hold_id = ?`
+          )
+          .run(bookingId, seat.id, holdId);
       if (res.changes !== 1) {
         throw conflict(`Seat ${seat.row_label}${seat.seat_number} is no longer held by you.`);
       }
       db.prepare(
-        `INSERT INTO booking_seats (booking_id, show_seat_id, price) VALUES (?, ?, ?)`
+          `INSERT INTO booking_seats (booking_id, show_seat_id, price) VALUES (?, ?, ?)`
       ).run(bookingId, seat.id, seat.price);
     }
 
@@ -471,12 +471,12 @@ export async function confirmBooking({ userId, holdId }) {
 
     // Close out any waitlist offer that produced this booking.
     const acceptedOffers = db
-      .prepare(
-        `SELECT * FROM waitlist_offers
-          WHERE user_id = ? AND status = 'ACCEPTED'
-            AND show_seat_id IN (${seats.map(() => '?').join(',')})`
-      )
-      .all(userId, ...seats.map((s) => s.id));
+        .prepare(
+            `SELECT * FROM waitlist_offers
+             WHERE user_id = ? AND status = 'ACCEPTED'
+               AND show_seat_id IN (${seats.map(() => '?').join(',')})`
+        )
+        .all(userId, ...seats.map((s) => s.id));
     for (const offer of acceptedOffers) {
       db.prepare(`UPDATE waitlists SET status = 'FULFILLED' WHERE id = ?`).run(offer.waitlist_id);
     }
@@ -487,18 +487,26 @@ export async function confirmBooking({ userId, holdId }) {
   const result = commit.immediate();
 
   publishSeatUpdates(
-    result.showId,
-    result.seats.map((s) => ({ id: s.id, status: 'BOOKED' })),
-    'booked'
+      result.showId,
+      result.seats.map((s) => ({ id: s.id, status: 'BOOKED' })),
+      'booked'
   );
 
-  // Ticket email + QR happen after the transaction commits; a mail failure
-  // never invalidates a confirmed booking.
-  const delivery = await deliverTicket(result.bookingId);
+  // The booking is fully committed at this point — the customer has their
+  // seats regardless of what happens next. Ticket delivery runs in the
+  // background rather than being awaited here: a slow or unreachable mail
+  // provider must never make checkout feel hung or time out, since nothing
+  // about the booking depends on the email actually landing before the
+  // response goes out. `deliverTicket` records its own outcome in
+  // `email_log`, and the client can check delivery status or trigger a
+  // re-send from the booking detail page.
+  deliverTicket(result.bookingId).catch((err) => {
+    console.error(`[mail] ticket delivery failed for booking ${result.bookingId}:`, err.message);
+  });
 
   return {
     ...(await getBooking({ userId, bookingId: result.bookingId })),
-    email: delivery,
+    email: { pending: true },
   };
 }
 
@@ -513,15 +521,15 @@ export async function deliverTicket(bookingId) {
   const user = db.prepare(`SELECT id, name, email FROM users WHERE id = ?`).get(booking.user_id);
   const show = S.showById.get(booking.show_id);
   const seats = db
-    .prepare(
-      `SELECT s.row_label, s.seat_number, c.name AS category
-         FROM booking_seats bs
-         JOIN show_seats ss ON ss.id = bs.show_seat_id
-         JOIN seats s ON s.id = ss.seat_id
-         JOIN seat_categories c ON c.id = ss.category_id
-        WHERE bs.booking_id = ?`
-    )
-    .all(bookingId);
+      .prepare(
+          `SELECT s.row_label, s.seat_number, c.name AS category
+           FROM booking_seats bs
+                  JOIN show_seats ss ON ss.id = bs.show_seat_id
+                  JOIN seats s ON s.id = ss.seat_id
+                  JOIN seat_categories c ON c.id = ss.category_id
+           WHERE bs.booking_id = ?`
+      )
+      .all(bookingId);
 
   const dataUrl = await qrDataUrl(booking.reference);
   const { subject, html, text, attachments } = bookingConfirmationEmail({
@@ -543,8 +551,8 @@ export async function deliverTicket(bookingId) {
 
 export async function getBooking({ userId, bookingId, reference, allowAny = false }) {
   const booking = reference
-    ? db.prepare(`SELECT * FROM bookings WHERE reference = ?`).get(reference)
-    : db.prepare(`SELECT * FROM bookings WHERE id = ?`).get(bookingId);
+      ? db.prepare(`SELECT * FROM bookings WHERE reference = ?`).get(reference)
+      : db.prepare(`SELECT * FROM bookings WHERE id = ?`).get(bookingId);
 
   if (!booking) throw notFound('That booking does not exist.');
   if (!allowAny && booking.user_id !== userId) {
@@ -554,15 +562,15 @@ export async function getBooking({ userId, bookingId, reference, allowAny = fals
 
   const show = S.showById.get(booking.show_id);
   const seats = db
-    .prepare(
-      `SELECT bs.price, s.row_label, s.seat_number, c.name AS category
-         FROM booking_seats bs
-         JOIN show_seats ss ON ss.id = bs.show_seat_id
-         JOIN seats s ON s.id = ss.seat_id
-         JOIN seat_categories c ON c.id = ss.category_id
-        WHERE bs.booking_id = ?`
-    )
-    .all(booking.id);
+      .prepare(
+          `SELECT bs.price, s.row_label, s.seat_number, c.name AS category
+           FROM booking_seats bs
+                  JOIN show_seats ss ON ss.id = bs.show_seat_id
+                  JOIN seats s ON s.id = ss.seat_id
+                  JOIN seat_categories c ON c.id = ss.category_id
+           WHERE bs.booking_id = ?`
+      )
+      .all(booking.id);
 
   return {
     id: booking.id,
@@ -589,22 +597,22 @@ export async function getBooking({ userId, bookingId, reference, allowAny = fals
 
 export function listBookings(userId) {
   const rows = db
-    .prepare(
-      `SELECT b.id, b.reference, b.status, b.total_amount, b.created_at,
-              e.title AS event_title, sh.starts_at, v.name AS venue_name, v.city,
-              (SELECT GROUP_CONCAT(s.row_label || s.seat_number, ', ')
-                 FROM booking_seats bs
-                 JOIN show_seats ss ON ss.id = bs.show_seat_id
-                 JOIN seats s ON s.id = ss.seat_id
-                WHERE bs.booking_id = b.id) AS seat_labels
-         FROM bookings b
-         JOIN shows sh ON sh.id = b.show_id
-         JOIN events e ON e.id = sh.event_id
-         JOIN venues v ON v.id = sh.venue_id
-        WHERE b.user_id = ?
-        ORDER BY b.created_at DESC, b.id DESC`
-    )
-    .all(userId);
+      .prepare(
+          `SELECT b.id, b.reference, b.status, b.total_amount, b.created_at,
+                  e.title AS event_title, sh.starts_at, v.name AS venue_name, v.city,
+                  (SELECT GROUP_CONCAT(s.row_label || s.seat_number, ', ')
+                   FROM booking_seats bs
+                          JOIN show_seats ss ON ss.id = bs.show_seat_id
+                          JOIN seats s ON s.id = ss.seat_id
+                   WHERE bs.booking_id = b.id) AS seat_labels
+           FROM bookings b
+                  JOIN shows sh ON sh.id = b.show_id
+                  JOIN events e ON e.id = sh.event_id
+                  JOIN venues v ON v.id = sh.venue_id
+           WHERE b.user_id = ?
+           ORDER BY b.created_at DESC, b.id DESC`
+      )
+      .all(userId);
 
   return rows.map((r) => ({
     id: r.id,
@@ -640,22 +648,22 @@ export function cancelBooking({ userId, bookingId, isAdmin = false }) {
     }
 
     db.prepare(
-      `UPDATE bookings SET status = 'CANCELLED', cancelled_at = ? WHERE id = ? AND status = 'CONFIRMED'`
+        `UPDATE bookings SET status = 'CANCELLED', cancelled_at = ? WHERE id = ? AND status = 'CONFIRMED'`
     ).run(nowIso(), bookingId);
 
     const seats = db
-      .prepare(
-        `SELECT ss.id, ss.show_id, ss.category_id
-           FROM booking_seats bs JOIN show_seats ss ON ss.id = bs.show_seat_id
-          WHERE bs.booking_id = ?`
-      )
-      .all(bookingId);
+        .prepare(
+            `SELECT ss.id, ss.show_id, ss.category_id
+             FROM booking_seats bs JOIN show_seats ss ON ss.id = bs.show_seat_id
+             WHERE bs.booking_id = ?`
+        )
+        .all(bookingId);
 
     for (const seat of seats) {
       db.prepare(
-        `UPDATE show_seats
-            SET status = 'AVAILABLE', booking_id = NULL, hold_id = NULL, version = version + 1
-          WHERE id = ? AND status = 'BOOKED'`
+          `UPDATE show_seats
+           SET status = 'AVAILABLE', booking_id = NULL, hold_id = NULL, version = version + 1
+           WHERE id = ? AND status = 'BOOKED'`
       ).run(seat.id);
 
       const offer = offerSeatToNextInQueue(seat.id, seat.show_id, seat.category_id);
@@ -690,23 +698,23 @@ export function joinWaitlist({ userId, showId, categoryId }) {
   if (!show) throw notFound('That show does not exist.');
 
   const category = db
-    .prepare(`SELECT * FROM seat_categories WHERE id = ? AND venue_id = ?`)
-    .get(categoryId, show.venue_id);
+      .prepare(`SELECT * FROM seat_categories WHERE id = ? AND venue_id = ?`)
+      .get(categoryId, show.venue_id);
   if (!category) throw notFound('That seat category does not exist for this venue.');
 
   const available = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM show_seats
-        WHERE show_id = ? AND category_id = ? AND status = 'AVAILABLE'`
-    )
-    .get(showId, categoryId).n;
+      .prepare(
+          `SELECT COUNT(*) AS n FROM show_seats
+           WHERE show_id = ? AND category_id = ? AND status = 'AVAILABLE'`
+      )
+      .get(showId, categoryId).n;
   if (available > 0) {
     throw conflict(`${category.name} still has ${available} seat(s) free — book one instead.`);
   }
 
   const existing = db
-    .prepare(`SELECT * FROM waitlists WHERE show_id = ? AND category_id = ? AND user_id = ?`)
-    .get(showId, categoryId, userId);
+      .prepare(`SELECT * FROM waitlists WHERE show_id = ? AND category_id = ? AND user_id = ?`)
+      .get(showId, categoryId, userId);
 
   const run = db.transaction(() => {
     if (existing) {
@@ -716,26 +724,26 @@ export function joinWaitlist({ userId, showId, categoryId }) {
       // Re-joining after an expired/cancelled turn puts the user at the back.
       const pos = nextPositionStmt.get(showId, categoryId).pos;
       db.prepare(`UPDATE waitlists SET status = 'WAITING', position = ?, created_at = ? WHERE id = ?`)
-        .run(pos, nowIso(), existing.id);
+          .run(pos, nowIso(), existing.id);
       return { id: existing.id, position: pos };
     }
     const pos = nextPositionStmt.get(showId, categoryId).pos;
     const id = db
-      .prepare(
-        `INSERT INTO waitlists (show_id, category_id, user_id, status, position)
-         VALUES (?, ?, ?, 'WAITING', ?)`
-      )
-      .run(showId, categoryId, userId, pos).lastInsertRowid;
+        .prepare(
+            `INSERT INTO waitlists (show_id, category_id, user_id, status, position)
+             VALUES (?, ?, ?, 'WAITING', ?)`
+        )
+        .run(showId, categoryId, userId, pos).lastInsertRowid;
     return { id, position: pos };
   });
 
   const entry = run.immediate();
   const ahead = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM waitlists
-        WHERE show_id = ? AND category_id = ? AND status = 'WAITING' AND position < ?`
-    )
-    .get(showId, categoryId, entry.position).n;
+      .prepare(
+          `SELECT COUNT(*) AS n FROM waitlists
+           WHERE show_id = ? AND category_id = ? AND status = 'WAITING' AND position < ?`
+      )
+      .get(showId, categoryId, entry.position).n;
 
   return {
     waitlistId: entry.id,
@@ -759,37 +767,37 @@ export function leaveWaitlist({ userId, waitlistId }) {
 export function myWaitlist(userId) {
   sweepExpired();
   const rows = db
-    .prepare(
-      `SELECT w.*, c.name AS category, e.title AS event_title, sh.starts_at,
-              v.name AS venue_name, v.city
-         FROM waitlists w
-         JOIN seat_categories c ON c.id = w.category_id
-         JOIN shows sh ON sh.id = w.show_id
-         JOIN events e ON e.id = sh.event_id
-         JOIN venues v ON v.id = sh.venue_id
-        WHERE w.user_id = ?
-        ORDER BY w.created_at DESC`
-    )
-    .all(userId);
+      .prepare(
+          `SELECT w.*, c.name AS category, e.title AS event_title, sh.starts_at,
+                  v.name AS venue_name, v.city
+           FROM waitlists w
+                  JOIN seat_categories c ON c.id = w.category_id
+                  JOIN shows sh ON sh.id = w.show_id
+                  JOIN events e ON e.id = sh.event_id
+                  JOIN venues v ON v.id = sh.venue_id
+           WHERE w.user_id = ?
+           ORDER BY w.created_at DESC`
+      )
+      .all(userId);
 
   return rows.map((r) => {
     const offer = db
-      .prepare(
-        `SELECT o.*, s.row_label, s.seat_number
-           FROM waitlist_offers o
-           JOIN show_seats ss ON ss.id = o.show_seat_id
-           JOIN seats s ON s.id = ss.seat_id
-          WHERE o.waitlist_id = ? AND o.status = 'PENDING'
-          ORDER BY o.id DESC LIMIT 1`
-      )
-      .get(r.id);
+        .prepare(
+            `SELECT o.*, s.row_label, s.seat_number
+             FROM waitlist_offers o
+                    JOIN show_seats ss ON ss.id = o.show_seat_id
+                    JOIN seats s ON s.id = ss.seat_id
+             WHERE o.waitlist_id = ? AND o.status = 'PENDING'
+             ORDER BY o.id DESC LIMIT 1`
+        )
+        .get(r.id);
 
     const ahead = db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM waitlists
-          WHERE show_id = ? AND category_id = ? AND status = 'WAITING' AND position < ?`
-      )
-      .get(r.show_id, r.category_id, r.position).n;
+        .prepare(
+            `SELECT COUNT(*) AS n FROM waitlists
+             WHERE show_id = ? AND category_id = ? AND status = 'WAITING' AND position < ?`
+        )
+        .get(r.show_id, r.category_id, r.position).n;
 
     return {
       waitlistId: r.id,
@@ -804,13 +812,13 @@ export function myWaitlist(userId) {
         venue: { name: r.venue_name, city: r.city },
       },
       offer: offer
-        ? {
+          ? {
             id: offer.id,
             seatLabel: `${offer.row_label}${offer.seat_number}`,
             showSeatId: offer.show_seat_id,
             expiresAt: offer.expires_at,
           }
-        : null,
+          : null,
     };
   });
 }
@@ -827,31 +835,31 @@ export function myWaitlist(userId) {
  */
 function offerSeatToNextInQueue(showSeatId, showId, categoryId) {
   const next = db
-    .prepare(
-      `SELECT * FROM waitlists
-        WHERE show_id = ? AND category_id = ? AND status = 'WAITING'
-        ORDER BY position ASC LIMIT 1`
-    )
-    .get(showId, categoryId);
+      .prepare(
+          `SELECT * FROM waitlists
+           WHERE show_id = ? AND category_id = ? AND status = 'WAITING'
+           ORDER BY position ASC LIMIT 1`
+      )
+      .get(showId, categoryId);
   if (!next) return null;
 
   const expiresAt = isoIn(config.waitlistOfferTtlSeconds);
 
   const offerId = db
-    .prepare(
-      `INSERT INTO waitlist_offers (waitlist_id, show_seat_id, user_id, status, expires_at)
-       VALUES (?, ?, ?, 'PENDING', ?)`
-    )
-    .run(next.id, showSeatId, next.user_id, expiresAt).lastInsertRowid;
+      .prepare(
+          `INSERT INTO waitlist_offers (waitlist_id, show_seat_id, user_id, status, expires_at)
+           VALUES (?, ?, ?, 'PENDING', ?)`
+      )
+      .run(next.id, showSeatId, next.user_id, expiresAt).lastInsertRowid;
 
   const res = db
-    .prepare(
-      `UPDATE show_seats
-          SET status = 'OFFERED', offer_id = ?, hold_id = NULL, booking_id = NULL,
-              version = version + 1
-        WHERE id = ? AND status = 'AVAILABLE'`
-    )
-    .run(offerId, showSeatId);
+      .prepare(
+          `UPDATE show_seats
+           SET status = 'OFFERED', offer_id = ?, hold_id = NULL, booking_id = NULL,
+               version = version + 1
+           WHERE id = ? AND status = 'AVAILABLE'`
+      )
+      .run(offerId, showSeatId);
 
   if (res.changes !== 1) {
     // Seat is not free after all — abandon the offer rather than double-book.
@@ -870,13 +878,13 @@ function announceOffer(offer) {
     const user = db.prepare(`SELECT id, name, email FROM users WHERE id = ?`).get(offer.userId);
     const show = S.showById.get(offer.showId);
     const seat = db
-      .prepare(
-        `SELECT s.row_label, s.seat_number, c.name AS category
-           FROM show_seats ss JOIN seats s ON s.id = ss.seat_id
-           JOIN seat_categories c ON c.id = ss.category_id
-          WHERE ss.id = ?`
-      )
-      .get(offer.showSeatId);
+        .prepare(
+            `SELECT s.row_label, s.seat_number, c.name AS category
+             FROM show_seats ss JOIN seats s ON s.id = ss.seat_id
+                                JOIN seat_categories c ON c.id = ss.category_id
+             WHERE ss.id = ?`
+        )
+        .get(offer.showSeatId);
 
     const { subject, html, text } = waitlistOfferEmail({
       user,
@@ -921,19 +929,19 @@ export function acceptOffer({ userId, offerId }) {
     if (!seat || seat.status !== 'OFFERED') throw conflict('That seat is no longer available.');
 
     const holdId = db
-      .prepare(
-        `INSERT INTO seat_holds (show_id, user_id, status, expires_at, source)
-         VALUES (?, ?, 'ACTIVE', ?, 'WAITLIST_OFFER')`
-      )
-      .run(seat.show_id, userId, isoIn(config.holdTtlSeconds)).lastInsertRowid;
+        .prepare(
+            `INSERT INTO seat_holds (show_id, user_id, status, expires_at, source)
+             VALUES (?, ?, 'ACTIVE', ?, 'WAITLIST_OFFER')`
+        )
+        .run(seat.show_id, userId, isoIn(config.holdTtlSeconds)).lastInsertRowid;
 
     const res = db
-      .prepare(
-        `UPDATE show_seats
-            SET status = 'HELD', hold_id = ?, offer_id = NULL, version = version + 1
-          WHERE id = ? AND status = 'OFFERED' AND offer_id = ?`
-      )
-      .run(holdId, seat.id, offerId);
+        .prepare(
+            `UPDATE show_seats
+             SET status = 'HELD', hold_id = ?, offer_id = NULL, version = version + 1
+             WHERE id = ? AND status = 'OFFERED' AND offer_id = ?`
+        )
+        .run(holdId, seat.id, offerId);
     if (res.changes !== 1) throw conflict('That seat is no longer available.');
 
     db.prepare(`UPDATE waitlist_offers SET status = 'ACCEPTED' WHERE id = ?`).run(offerId);
@@ -967,8 +975,8 @@ export function declineOffer({ userId, offerId }) {
 
     const seat = db.prepare(`SELECT * FROM show_seats WHERE id = ?`).get(offer.show_seat_id);
     db.prepare(
-      `UPDATE show_seats SET status = 'AVAILABLE', offer_id = NULL, version = version + 1
-        WHERE id = ? AND status = 'OFFERED'`
+        `UPDATE show_seats SET status = 'AVAILABLE', offer_id = NULL, version = version + 1
+         WHERE id = ? AND status = 'OFFERED'`
     ).run(seat.id);
 
     const next = offerSeatToNextInQueue(seat.id, seat.show_id, seat.category_id);

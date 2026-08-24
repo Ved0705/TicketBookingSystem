@@ -13,6 +13,13 @@ function getSmtpTransport() {
     port: config.mail.port,
     secure: config.mail.secure,
     auth: config.mail.user ? { user: config.mail.user, pass: config.mail.pass } : undefined,
+    // Without these, a provider that silently drops the connection (common
+    // for cloud-host IPs hitting Gmail) leaves nodemailer waiting on the
+    // socket indefinitely. Fail fast instead so a mail hiccup is seconds,
+    // not minutes.
+    connectionTimeout: 10_000, // time to establish the TCP connection
+    greetingTimeout: 10_000, // time to receive the server's initial greeting
+    socketTimeout: 15_000, // time allowed between any two data packets
   });
   return smtpTransport;
 }
@@ -20,8 +27,8 @@ function getSmtpTransport() {
 function record({ to, subject, body, transport, status, error }) {
   try {
     db.prepare(
-      `INSERT INTO email_log (to_email, subject, body, transport, status, error)
-       VALUES (?, ?, ?, ?, ?, ?)`
+        `INSERT INTO email_log (to_email, subject, body, transport, status, error)
+         VALUES (?, ?, ?, ?, ?, ?)`
     ).run(to, subject, body, transport, status, error || null);
   } catch {
     /* logging must never break a booking */
@@ -34,8 +41,8 @@ function writeToOutbox({ to, subject, html }) {
   const safe = to.replace(/[^a-z0-9@._-]/gi, '_');
   const file = path.join(config.mail.outboxDir, `${stamp}__${safe}.html`);
   fs.writeFileSync(
-    file,
-    `<!-- To: ${to}\n     Subject: ${subject}\n     Sent: ${new Date().toISOString()} -->\n${html}`
+      file,
+      `<!-- To: ${to}\n     Subject: ${subject}\n     Sent: ${new Date().toISOString()} -->\n${html}`
   );
   return file;
 }
@@ -123,7 +130,7 @@ export function inlineImageAttachment(dataUrl, { cid, filename }) {
 }
 
 const row = (label, value) =>
-  `<tr><td style="padding:6px 14px 6px 0;color:#6b7280;font:13px system-ui">${label}</td>
+    `<tr><td style="padding:6px 14px 6px 0;color:#6b7280;font:13px system-ui">${label}</td>
        <td style="padding:6px 0;color:#111827;font:600 13px system-ui">${value}</td></tr>`;
 
 export function bookingConfirmationEmail({ booking, event, show, venue, seats, qrDataUrl }) {

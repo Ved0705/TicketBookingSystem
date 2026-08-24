@@ -10,6 +10,19 @@ import path from 'node:path';
 import { fork } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+/** Poll email_log briefly for a row that has landed asynchronously. */
+async function waitForEmailLogRow(db, toEmail, timeoutMs = 2000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const row = db
+        .prepare('SELECT * FROM email_log WHERE to_email = ? ORDER BY id DESC LIMIT 1')
+        .get(toEmail);
+    if (row) return row;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return null;
+}
+
 let admin, organiser;
 
 before(async () => {
@@ -57,9 +70,9 @@ describe('booking reference and QR code', () => {
     assert.ok(booking.qrDataUrl.startsWith('data:image/png;base64,'));
     const bytes = Buffer.from(booking.qrDataUrl.split(',')[1], 'base64');
     assert.deepEqual(
-      [...bytes.subarray(0, 8)],
-      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-      'must carry a valid PNG signature'
+        [...bytes.subarray(0, 8)],
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        'must carry a valid PNG signature'
     );
     assert.ok(bytes.length > 200, 'must not be an empty image');
 
@@ -88,14 +101,13 @@ describe('ticket email', () => {
     const customer = await register('CUSTOMER');
     const { booking } = await bookOneSeat(customer);
 
-    assert.ok(booking.email, 'the API reports the delivery outcome');
-    assert.equal(booking.email.ok, true);
-    assert.equal(booking.email.to, customer.email);
+    // Mail delivery runs in the background so a slow/unreachable provider
+    // never makes checkout hang — the booking response only reports that
+    // delivery has been kicked off, not its outcome.
+    assert.deepEqual(booking.email, { pending: true });
 
     const { db } = await import('../src/db/index.js');
-    const row = db
-      .prepare('SELECT * FROM email_log WHERE to_email = ? ORDER BY id DESC LIMIT 1')
-      .get(customer.email);
+    const row = await waitForEmailLogRow(db, customer.email);
 
     assert.ok(row, 'the send is recorded in email_log');
     assert.equal(row.status, 'SENT');
@@ -107,9 +119,7 @@ describe('ticket email', () => {
     const { fixture, booking } = await bookOneSeat(customer);
 
     const { db } = await import('../src/db/index.js');
-    const row = db
-      .prepare('SELECT * FROM email_log WHERE to_email = ? ORDER BY id DESC LIMIT 1')
-      .get(customer.email);
+    const row = await waitForEmailLogRow(db, customer.email);
 
     assert.match(row.body, new RegExp(fixture.event.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(row.body, new RegExp(fixture.venue.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -121,6 +131,9 @@ describe('ticket email', () => {
   test('the developer outbox endpoint exposes what was sent', async () => {
     const customer = await register('CUSTOMER');
     const { booking } = await bookOneSeat(customer);
+
+    const { db } = await import('../src/db/index.js');
+    await waitForEmailLogRow(db, customer.email);
 
     const list = await api('/api/dev/emails?limit=5');
     assert.equal(list.status, 200);
@@ -179,8 +192,8 @@ describe('ticket email', () => {
 
     const { db } = await import('../src/db/index.js');
     const row = db
-      .prepare('SELECT * FROM email_log WHERE to_email = ? ORDER BY id DESC LIMIT 1')
-      .get(waiter.email);
+        .prepare('SELECT * FROM email_log WHERE to_email = ? ORDER BY id DESC LIMIT 1')
+        .get(waiter.email);
     assert.ok(row, 'the waitlist offer email was sent');
     assert.match(row.subject, /accept within/i);
     assert.match(row.body, /A1/);
