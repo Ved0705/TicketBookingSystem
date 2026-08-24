@@ -88,8 +88,12 @@ that reference, so a scanner resolves the booking server-side instead of trustin
 payload. The ticket email carries event, venue, date/time, seats, reference and the inline
 QR.
 
-Mail runs after the transaction commits — a mail outage never invalidates a paid booking.
+The QR is sent as an inline `multipart/related` attachment (`cid:booking-qr`) rather than a
+`data:` URI, which Gmail and Outlook block.
+
+Mail runs after the transaction commits — a mail outage never invalidates a paid booking;
+the send is reported as failed and the message still lands in the outbox.
 `MAIL_TRANSPORT=smtp` delivers for real; the default `file` transport writes rendered
 `.html` into `backend/outbox/`, and `console` prints a summary. Every attempt is recorded
-in `email_log` and browsable at `/api/dev/emails`, so the flow is fully testable with no
+in `email_log` and browsable at `/api/dev/emails`, so the flow is testable with no
 third-party credentials.

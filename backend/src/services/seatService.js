@@ -524,7 +524,7 @@ export async function deliverTicket(bookingId) {
     .all(bookingId);
 
   const dataUrl = await qrDataUrl(booking.reference);
-  const { subject, html, text } = bookingConfirmationEmail({
+  const { subject, html, text, attachments } = bookingConfirmationEmail({
     booking,
     event: { title: show.event_title },
     show,
@@ -533,7 +533,7 @@ export async function deliverTicket(bookingId) {
     qrDataUrl: dataUrl,
   });
 
-  const res = await sendMail({ to: user.email, subject, html, text });
+  const res = await sendMail({ to: user.email, subject, html, text, attachments });
   return { to: user.email, subject, ...res };
 }
 

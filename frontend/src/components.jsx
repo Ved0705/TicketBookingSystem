@@ -154,12 +154,13 @@ export function useSeatSocket(showId, { onSeats, onOffer } = {}) {
 
 /* -------------------------------------------------------------- seat map */
 
+// Kept in step with the seat colours in styles.css.
 const LEGEND = [
-  { key: 'available', label: 'Available', border: '#79838d', bg: 'transparent' },
-  { key: 'selected', label: 'Your selection', border: '#2f9c74', bg: '#17654a' },
-  { key: 'held', label: 'Held by someone', border: '#a8681c', bg: '#a8681c' },
-  { key: 'booked', label: 'Booked', border: '#5a6068', bg: '#5a6068' },
-  { key: 'offered', label: 'Reserved for waitlist', border: '#5b4a91', bg: '#5b4a91' },
+  { key: 'available', label: 'Available', border: '#3c466b', bg: '#222941' },
+  { key: 'selected', label: 'Your selection', border: '#ffd977', bg: '#f0b429' },
+  { key: 'held', label: 'Held by someone', border: '#ffae5c', bg: '#f0932b' },
+  { key: 'booked', label: 'Booked', border: '#5a6480', bg: '#4b5570' },
+  { key: 'offered', label: 'Reserved for waitlist', border: '#b9a1ff', bg: '#9b7bf0' },
 ];
 
 /**

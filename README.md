@@ -7,6 +7,42 @@ that makes double-booking impossible**, a **FIFO waitlist with time-limited offe
 
 ---
 
+## 🔗 Live demo
+
+| | |
+| --- | --- |
+| **Application** | https://ticket-booking-system-theta-lyart.vercel.app |
+| **API** | https://ticketbookingsystem-f1b4.onrender.com/api |
+| **API docs (Swagger)** | https://ticketbookingsystem-f1b4.onrender.com/api/docs |
+| **Health check** | https://ticketbookingsystem-f1b4.onrender.com/api/health |
+| **Source** | https://github.com/Ved0705/TicketBookingSystem |
+
+**Demo accounts** — password `Password123!` for all:
+
+| Email | Role |
+| --- | --- |
+| `customer@tbs.local` | Customer |
+| `organiser@tbs.local` | Organiser |
+| `admin@tbs.local` | Admin |
+
+> ⏱️ **The API is on Render's free tier and sleeps after ~15 minutes of inactivity.** The
+> first request may take up to a minute to wake it — open the health check link above and
+> wait for `{"status":"ok"}` before using the app. Because the free tier has no persistent
+> disk, demo data is re-seeded on each restart, so bookings made during a previous session
+> may not survive.
+
+### Quickest way to see the interesting parts
+
+1. Sign in as `customer@tbs.local`, open any show, and select seats — **the countdown is
+   the server's, not the browser's.**
+2. Open the same show in a second browser (or an incognito window) and watch your held
+   seats appear as `HELD` there **without reloading**.
+3. Book, then cancel from *Bookings* — the seats free up live in the other window.
+4. For the waitlist: open **Night Bus Sessions** (a deliberately tiny 10-seat venue), sell
+   it out, then join the queue and cancel a booking to trigger a timed offer.
+
+---
+
 ## Table of contents
 
 1. [Project overview](#1-project-overview)
@@ -134,7 +170,7 @@ ticket-booking-system/
 │   │   ├── realtime/hub.js        # websocket rooms + publishing
 │   │   ├── jobs/scheduler.js      # background expiry sweeper
 │   │   └── utils/                 # auth, validate, qr, mailer, errors
-│   ├── tests/                     # 78 tests across 6 suites
+│   ├── tests/                     # 80 tests across 6 suites
 │   ├── openapi.json               # OpenAPI 3.0 spec (served at /api/docs)
 │   └── package.json
 ├── frontend/
@@ -241,7 +277,8 @@ cd backend && npm run dev        # or: npm start
 cd frontend && npm run dev
 ```
 
-Then open **http://localhost:5173** and sign in with a seeded account.
+Then open **http://localhost:5173** and sign in with a seeded account. (A deployed copy is
+linked at the [top of this README](#-live-demo) if you would rather not run it locally.)
 
 | URL | What |
 | --- | --- |
@@ -428,20 +465,52 @@ On confirmation the server generates a reference like `TBS-3M6XS6TU` (8 characte
 alphabet that excludes `I`, `O`, `0`, `1` so it can be read aloud) and a QR PNG that
 encodes **only the reference**, so a scanner resolves the booking server-side rather than
 trusting the payload. The email contains event, venue, date/time, seats, reference and the
-inline QR.
+QR.
+
+The QR travels as an **inline `multipart/related` attachment** referenced from the HTML as
+`cid:booking-qr`, not as a `data:` URI — Gmail and Outlook silently block `data:` image
+sources, so a data-URI ticket arrives with a broken image. For the `file` and `console`
+transports the CID is swapped back to a data URI when the copy is written, so the saved
+`.html` still renders correctly in a browser.
 
 Mail is sent **after** the booking transaction commits, so a mail outage can never
 invalidate a paid booking.
 
 | `MAIL_TRANSPORT` | Behaviour |
 | --- | --- |
-| `smtp` | Real delivery; on failure it logs and falls back to a file |
+| `smtp` | Real delivery. If the provider is unreachable the error is logged, the send is reported as failed, and the message is still written to the outbox — a mail outage never silently loses a ticket |
 | `file` *(default)* | Writes rendered `.html` into `backend/outbox/` |
 | `console` | Prints a summary to stdout |
 
 Every attempt is recorded in `email_log`, listed at `GET /api/dev/emails` and viewable as
 HTML at `/api/dev/emails/:id` — so the whole flow is verifiable with no third-party
-credentials. Customers can also re-send their own ticket.
+credentials. Customers can also re-send their own ticket from a booking.
+
+### Turning on real delivery
+
+Any SMTP provider with a free tier works. Set these as environment variables (never in a
+committed file):
+
+```bash
+MAIL_TRANSPORT=smtp
+SMTP_HOST=smtp-relay.brevo.com     # or smtp.resend.com, sandbox.smtp.mailtrap.io, …
+SMTP_PORT=587
+SMTP_SECURE=false                  # true only for port 465
+SMTP_USER=<provider username>
+SMTP_PASS=<provider password or API key>
+MAIL_FROM=Box Office <no-reply@yourdomain.com>
+```
+
+Notes that catch people out:
+
+- `MAIL_FROM` usually has to be an address the provider has verified, otherwise the send is
+  rejected or lands in spam.
+- Port `587` is STARTTLS, so `SMTP_SECURE=false`; only port `465` takes `true`.
+- **Mailtrap** is the easiest option for a demo: it captures mail in a web inbox instead of
+  delivering it, so you can show real SMTP working without owning a domain.
+
+Check it landed at `GET /api/dev/emails` — a `transport` of `smtp` with status `SENT` means
+the provider accepted the message; `FAILED` records the provider's own error text.
 
 ---
 
@@ -470,7 +539,7 @@ place (preserving scroll position) and reconnects automatically after a server r
 cd backend && npm test
 ```
 
-**78 automated tests across 6 suites, all passing.**
+**80 automated tests across 6 suites, all passing.**
 
 | Suite | Covers |
 | --- | --- |
@@ -478,7 +547,7 @@ cd backend && npm test
 | `booking.test.js` (17) | Seat map, per-show status isolation, single and multi-seat holds, all-or-nothing holds, seat limits, release, **TTL expiry**, expired hold refused at checkout, booking, double-booking prevented, ownership isolation, cancellation |
 | `waitlist.test.js` (13) | Join refused while seats remain, sold-out join, FIFO ordering, offer on cancellation, offered seat unholdable by others, accept → book, wrong-customer rejection, **offer expiry rolls to the next customer**, empty queue returns seat to sale, decline re-offers |
 | `concurrency.test.js` (4) | 20 parallel holds on one seat, overlapping multi-seat holds, duplicate checkout, **8 separate OS processes racing on the same database file** |
-| `qr-email.test.js` (8) | Reference format and uniqueness, QR is a valid PNG encoding exactly the reference, email recorded with event/venue/seats/reference/QR, dev outbox, re-send ownership, waitlist offer email |
+| `qr-email.test.js` (10) | Reference format and uniqueness, QR is a valid PNG encoding exactly the reference, email recorded with event/venue/seats/reference/QR, dev outbox, re-send ownership, waitlist offer email, **real SMTP delivery against a live SMTP server** (asserts the inline CID attachment in the raw MIME), and the failed-send fallback |
 | `admin-organiser.test.js` (15) | Venue/category/layout CRUD, layout locking, cross-organiser isolation, per-show inventory creation, pricing validation, summary and revenue accuracy, public filtering |
 
 Each suite runs against its own throwaway database and a real HTTP server with the real
@@ -499,31 +568,98 @@ real Chromium browser):
 - organiser and admin dashboards, layout editor, venue picker, statistics
 - zero browser console errors
 
+**On SMTP:** the delivery path is verified against a real SMTP server spun up inside the
+test suite, which asserts on the raw MIME that arrives. What has *not* been tested is a
+specific third-party provider (Brevo, Resend, Gmail and so on), since no credentials were
+available — but those differ only in host, port and authentication, all of which are
+configuration.
+
 ---
 
 ## 19. Deployment
 
-**Backend**
+This project is deployed as **two services**: the API on Render and the SPA on Vercel.
 
-1. Set `NODE_ENV=production`, a strong `JWT_SECRET`, and `CORS_ORIGINS` to your frontend
-   origin.
-2. Point `DATABASE_FILE` at persistent storage (SQLite in WAL mode is fine for a single
-   node). For multiple API instances, move to PostgreSQL — the concurrency approach
-   (`BEGIN IMMEDIATE` → `SELECT … FOR UPDATE` or the same conditional `UPDATE … WHERE
-   status='AVAILABLE'`) ports directly, since the guarantees live in SQL, not in Node.
-3. `npm ci --omit=dev && npm run migrate && npm start` behind a reverse proxy that
-   forwards WebSocket upgrades on `/ws`.
-4. Set `MAIL_TRANSPORT=smtp` with real credentials supplied as environment variables.
+> **Why not Vercel for the backend?** It is serverless, and this API needs a long-lived
+> process for two reasons: persistent WebSocket connections, and the background TTL sweeper
+> that releases expired holds. Both die under a serverless model.
 
-**Frontend**
+### Backend — Render (Web Service)
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `backend` |
+| Environment | Node |
+| Build command | `npm install` |
+| Start command | `npm run migrate && npm run seed && npm start` |
+
+Environment variables:
+
+| Key | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | a long random string — see below |
+| `DATABASE_FILE` | `/var/data/ticket-booking.db` (with a disk) or `data/ticket-booking.db` |
+| `CORS_ORIGINS` | the deployed frontend origin, no trailing slash |
+| `HOLD_TTL_SECONDS` | `600` |
+| `WAITLIST_OFFER_TTL_SECONDS` | `300` |
+| `MAIL_TRANSPORT` | `file` (or `smtp` with real credentials) |
 
 ```bash
-cd frontend && VITE_API_URL=https://api.example.com npm run build
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Serve `dist/` from any static host with SPA fallback (rewrite unknown paths to
-`index.html`).
+**Persistence.** SQLite is a file, so it needs somewhere to live. On a paid instance, mount
+a disk at `/var/data` and point `DATABASE_FILE` at it; bookings then survive restarts and
+the start command can be reduced to `npm start`. On the **free tier there is no disk**, so
+the filesystem resets on redeploy — which is why the start command above re-runs migrate
+and seed on every boot. Both are idempotent (`migrate` uses `IF NOT EXISTS`, `seed` skips
+rows that already exist), so this is safe to run repeatedly and guarantees the demo data is
+always present.
 
-**Notes** — run one sweeper per database (the scheduler is per-process; with several API
-instances, run it in a single worker or move expiry to a shared scheduler). Terminate TLS
-at the proxy and use `wss://` in production.
+Free instances also sleep after ~15 minutes of inactivity; the next request takes roughly a
+minute while the container wakes.
+
+### Frontend — Vercel
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `frontend` |
+| Framework preset | Vite |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+
+| Env var | Value |
+| --- | --- |
+| `VITE_API_URL` | the Render API origin, **no trailing slash** |
+
+`VITE_API_URL` is read at **build** time, not runtime — changing it requires a redeploy,
+not just a restart. The frontend derives the WebSocket URL from it, so an `https://` API
+origin automatically yields `wss://`.
+
+Add `frontend/vercel.json` so client-side routes such as `/bookings/3` resolve instead of
+404-ing:
+
+```json
+{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+```
+
+### After deploying
+
+Set `CORS_ORIGINS` on Render to the real Vercel origin and redeploy the API. If the seat map
+shows *"Reconnecting…"* instead of a green **Live** dot, the cause is almost always a
+mismatch between `VITE_API_URL` and `CORS_ORIGINS` — check scheme, host and the absence of a
+trailing slash on both.
+
+### Scaling beyond one instance
+
+Two things are single-node today and would need attention at scale:
+
+- **The database.** Move to PostgreSQL. The concurrency approach ports directly — the same
+  conditional `UPDATE … WHERE status='AVAILABLE'`, or `SELECT … FOR UPDATE` — because the
+  guarantees live in SQL, not in Node.
+- **The sweeper.** It runs per process, so several API instances would sweep redundantly.
+  Run it in a single worker, or move expiry to a shared scheduler.
+
+WebSocket fan-out is also in-process; multiple instances would need a shared pub/sub layer
+(Redis or similar) so a hold placed on instance A reaches a client connected to instance B.

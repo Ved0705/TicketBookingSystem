@@ -3,6 +3,12 @@ import {
 } from './helpers.js';
 import test, { before, after, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fork } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 let admin, organiser;
 
@@ -178,5 +184,125 @@ describe('ticket email', () => {
     assert.ok(row, 'the waitlist offer email was sent');
     assert.match(row.subject, /accept within/i);
     assert.match(row.body, /A1/);
+  });
+});
+
+describe('SMTP delivery path', () => {
+  /**
+   * The dev transports never exercise nodemailer itself. This spins up a
+   * throwaway SMTP server and runs the send in a child process (config.js is a
+   * module singleton, so the transport has to be chosen before it loads).
+   * It then asserts on the raw MIME that arrives — in particular that the QR is
+   * an inline CID attachment rather than a `data:` URI, which Gmail and Outlook
+   * silently block.
+   */
+  function smtpSink() {
+    const received = [];
+    const server = net.createServer((sock) => {
+      let buf = '';
+      let inData = false;
+      let msg = '';
+      sock.write('220 localhost ESMTP test\r\n');
+      sock.on('data', (chunk) => {
+        buf += chunk.toString();
+        let i;
+        while ((i = buf.indexOf('\r\n')) !== -1) {
+          const line = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          if (inData) {
+            if (line === '.') { inData = false; received.push(msg); msg = ''; sock.write('250 OK\r\n'); }
+            else msg += line + '\n';
+            continue;
+          }
+          const cmd = line.toUpperCase();
+          if (cmd.startsWith('EHLO') || cmd.startsWith('HELO')) sock.write('250-localhost\r\n250 AUTH PLAIN LOGIN\r\n');
+          else if (cmd === 'DATA') { inData = true; sock.write('354 Go ahead\r\n'); }
+          else if (cmd === 'QUIT') { sock.write('221 Bye\r\n'); sock.end(); }
+          else sock.write('250 OK\r\n');
+        }
+      });
+      sock.on('error', () => {});
+    });
+    return { server, received };
+  }
+
+  /** Run one send in a child process with the given mail environment. */
+  function sendInChild(env) {
+    const file = path.join(os.tmpdir(), `tbs-mail-${process.pid}-${Date.now()}.mjs`);
+    fs.writeFileSync(file, `
+      const mailer = await import(${JSON.stringify(pathToFileURL(path.resolve('src/utils/mailer.js')).href)});
+      const { qrDataUrl } = await import(${JSON.stringify(pathToFileURL(path.resolve('src/utils/qr.js')).href)});
+      const dataUrl = await qrDataUrl('TBS-SMTPTEST');
+      const mail = mailer.bookingConfirmationEmail({
+        booking: { reference: 'TBS-SMTPTEST', total_amount: 500 },
+        event: { title: 'SMTP Test Show' },
+        show: { starts_at: new Date().toISOString() },
+        venue: { name: 'Test Venue', city: 'Testville' },
+        seats: [{ row_label: 'A', seat_number: 1, category: 'Premium' }],
+        qrDataUrl: dataUrl,
+      });
+      const res = await mailer.sendMail({ to: 'reviewer@test.local', ...mail });
+      process.send({
+        res,
+        attachmentCount: mail.attachments.length,
+        cid: mail.attachments[0］?.cid,
+        htmlUsesCid: /cid:booking-qr/.test(mail.html),
+        htmlUsesDataUri: /<img[^>]+src="data:/.test(mail.html),
+      });
+    `.replace('［', '[').replace('］', ']'));
+
+    return new Promise((resolve) => {
+      const child = fork(file, [], {
+        stdio: 'ignore',
+        env: { ...process.env, DATABASE_FILE: ':memory:', ...env },
+      });
+      child.on('message', (m) => { fs.rmSync(file, { force: true }); resolve(m); });
+      child.on('exit', () => resolve(null));
+    });
+  }
+
+  test('sends real MIME with the QR as an inline CID attachment', async () => {
+    const { server, received } = smtpSink();
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const { port } = server.address();
+
+    try {
+      const out = await sendInChild({
+        MAIL_TRANSPORT: 'smtp',
+        SMTP_HOST: '127.0.0.1',
+        SMTP_PORT: String(port),
+        SMTP_SECURE: 'false',
+      });
+
+      assert.ok(out, 'the child reported a result');
+      assert.equal(out.attachmentCount, 1);
+      assert.equal(out.cid, 'booking-qr');
+      assert.equal(out.htmlUsesCid, true);
+      assert.equal(out.htmlUsesDataUri, false, 'must not inline the QR as a data URI');
+      assert.equal(out.res.transport, 'smtp');
+      assert.equal(out.res.ok, true);
+
+      const raw = received.join('\n');
+      assert.match(raw, /Content-Type: multipart\/related/);
+      assert.match(raw, /Content-ID: <booking-qr>/);
+      assert.match(raw, /Content-Disposition: inline/);
+      assert.match(raw, /image\/png/);
+      assert.match(raw, /TBS-SMTPTEST/);
+    } finally {
+      await new Promise((r) => server.close(r));
+    }
+  });
+
+  test('a failed SMTP send falls back to a file instead of losing the ticket', async () => {
+    const out = await sendInChild({
+      MAIL_TRANSPORT: 'smtp',
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: '1', // nothing is listening here
+      SMTP_SECURE: 'false',
+    });
+    assert.ok(out);
+    assert.equal(out.res.ok, false, 'the failure is reported honestly');
+    assert.equal(out.res.transport, 'file', 'but the ticket is still preserved');
+    assert.ok(out.res.error);
   });
 });

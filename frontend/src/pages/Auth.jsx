@@ -72,6 +72,20 @@ export function Login() {
       <p className="muted" style={{ marginTop: 14 }}>
         No account yet? <Link to="/register">Create one</Link>.
       </p>
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <p className="eyebrow">Demo accounts (after running the seed)</p>
+        <table>
+          <tbody>
+            <tr><td className="mono">customer@tbs.local</td><td className="faint">Customer</td></tr>
+            <tr><td className="mono">organiser@tbs.local</td><td className="faint">Organiser</td></tr>
+            <tr><td className="mono">admin@tbs.local</td><td className="faint">Admin</td></tr>
+          </tbody>
+        </table>
+        <p className="faint" style={{ marginBottom: 0 }}>
+          Password for all seeded accounts: <span className="mono">Password123!</span>
+        </p>
+      </div>
     </div>
   );
 }

@@ -49,9 +49,14 @@ function writeToOutbox({ to, subject, html }) {
  *
  * Every attempt is written to the `email_log` table either way, so the flow is
  * verifiable without any third-party credentials.
+ *
+ * `attachments` follows nodemailer's shape. Inline images are referenced from
+ * the HTML as `cid:<contentId>`; for the non-SMTP transports the cid reference
+ * is swapped back to a data URI so the saved file still renders in a browser.
  */
-export async function sendMail({ to, subject, html, text }) {
+export async function sendMail({ to, subject, html, text, attachments = [] }) {
   const mode = config.mail.transport;
+  const previewHtml = inlineCidsAsDataUris(html, attachments);
 
   if (mode === 'smtp' && config.mail.host) {
     try {
@@ -61,26 +66,60 @@ export async function sendMail({ to, subject, html, text }) {
         subject,
         html,
         text,
+        attachments,
       });
-      record({ to, subject, body: html, transport: 'smtp', status: 'SENT' });
+      record({ to, subject, body: previewHtml, transport: 'smtp', status: 'SENT' });
       return { transport: 'smtp', ok: true, messageId: info.messageId };
     } catch (err) {
       // Never let a mail outage roll back a confirmed booking — log and fall back.
-      record({ to, subject, body: html, transport: 'smtp', status: 'FAILED', error: err.message });
-      const file = writeToOutbox({ to, subject, html });
+      record({ to, subject, body: previewHtml, transport: 'smtp', status: 'FAILED', error: err.message });
+      const file = writeToOutbox({ to, subject, html: previewHtml });
       return { transport: 'file', ok: false, error: err.message, file };
     }
   }
 
   if (mode === 'console') {
     console.log(`\n--- EMAIL (dev) ---\nTo: ${to}\nSubject: ${subject}\n${text || ''}\n---\n`);
-    record({ to, subject, body: html, transport: 'console', status: 'SENT' });
+    record({ to, subject, body: previewHtml, transport: 'console', status: 'SENT' });
     return { transport: 'console', ok: true };
   }
 
-  const file = writeToOutbox({ to, subject, html });
-  record({ to, subject, body: html, transport: 'file', status: 'SENT' });
+  const file = writeToOutbox({ to, subject, html: previewHtml });
+  record({ to, subject, body: previewHtml, transport: 'file', status: 'SENT' });
   return { transport: 'file', ok: true, file };
+}
+
+/**
+ * Replace `cid:foo` image sources with the equivalent data URI.
+ *
+ * Real mail clients need a CID attachment (Gmail and Outlook block `data:`
+ * image sources outright), but a file on disk opened in a browser needs the
+ * opposite. The HTML is authored with CIDs and converted here for the dev
+ * transports and for the stored audit copy.
+ */
+function inlineCidsAsDataUris(html, attachments) {
+  if (!html || attachments.length === 0) return html;
+  let out = html;
+  for (const att of attachments) {
+    if (!att.cid || !att.content) continue;
+    const base64 = Buffer.isBuffer(att.content) ? att.content.toString('base64') : att.content;
+    const dataUri = `data:${att.contentType || 'application/octet-stream'};base64,${base64}`;
+    out = out.split(`cid:${att.cid}`).join(dataUri);
+  }
+  return out;
+}
+
+/** Turn a data URL into a nodemailer inline attachment. */
+export function inlineImageAttachment(dataUrl, { cid, filename }) {
+  const [meta, base64] = String(dataUrl).split(',');
+  const contentType = /data:([^;]+)/.exec(meta)?.[1] || 'image/png';
+  return {
+    filename,
+    cid,
+    contentType,
+    content: Buffer.from(base64, 'base64'),
+    contentDisposition: 'inline',
+  };
 }
 
 const row = (label, value) =>
@@ -104,7 +143,7 @@ export function bookingConfirmationEmail({ booking, event, show, venue, seats, q
     </table>
     <p style="font:13px system-ui;color:#374151;margin:20px 0 8px">
       Show this QR code at the entrance.</p>
-    <img src="${qrDataUrl}" alt="QR code for booking ${booking.reference}" width="220" height="220"/>
+    <img src="cid:booking-qr" alt="QR code for booking ${booking.reference}" width="220" height="220"/>
     <p style="font:12px system-ui;color:#9ca3af;margin-top:20px">
       Cancel any time from your booking history before the show starts.</p>
   </div>`;
@@ -114,7 +153,15 @@ When: ${when}
 Seats: ${seatList}
 Reference: ${booking.reference}
 Total: ${booking.total_amount.toFixed(2)}`;
-  return { subject: `Your tickets for ${event.title} — ${booking.reference}`, html, text };
+  return {
+    subject: `Your tickets for ${event.title} — ${booking.reference}`,
+    html,
+    text,
+    // Inline attachment rather than a data: URI — Gmail and Outlook block the latter.
+    attachments: [
+      inlineImageAttachment(qrDataUrl, { cid: 'booking-qr', filename: `${booking.reference}.png` }),
+    ],
+  };
 }
 
 export function waitlistOfferEmail({ user, event, show, venue, seat, offer, expiresAt }) {
