@@ -7,6 +7,42 @@ that makes double-booking impossible**, a **FIFO waitlist with time-limited offe
 
 ---
 
+## 🔗 Live demo
+
+| | |
+| --- | --- |
+| **Application** | https://ticket-booking-system-theta-lyart.vercel.app |
+| **API** | https://ticketbookingsystem-f1b4.onrender.com/api |
+| **API docs (Swagger)** | https://ticketbookingsystem-f1b4.onrender.com/api/docs |
+| **Health check** | https://ticketbookingsystem-f1b4.onrender.com/api/health |
+| **Source** | https://github.com/Ved0705/TicketBookingSystem |
+
+**Demo accounts** — password `Password123!` for all:
+
+| Email | Role |
+| --- | --- |
+| `customer@tbs.local` | Customer |
+| `organiser@tbs.local` | Organiser |
+| `admin@tbs.local` | Admin |
+
+> ⏱️ **The API is on Render's free tier and sleeps after ~15 minutes of inactivity.** The
+> first request may take up to a minute to wake it — open the health check link above and
+> wait for `{"status":"ok"}` before using the app. Because the free tier has no persistent
+> disk, demo data is re-seeded on each restart, so bookings made during a previous session
+> may not survive.
+
+### Quickest way to see the interesting parts
+
+1. Sign in as `customer@tbs.local`, open any show, and select seats — **the countdown is
+   the server's, not the browser's.**
+2. Open the same show in a second browser (or an incognito window) and watch your held
+   seats appear as `HELD` there **without reloading**.
+3. Book, then cancel from *Bookings* — the seats free up live in the other window.
+4. For the waitlist: open **Night Bus Sessions** (a deliberately tiny 10-seat venue), sell
+   it out, then join the queue and cancel a booking to trigger a timed offer.
+
+---
+
 ## Table of contents
 
 1. [Project overview](#1-project-overview)
@@ -241,7 +277,8 @@ cd backend && npm run dev        # or: npm start
 cd frontend && npm run dev
 ```
 
-Then open **http://localhost:5173** and sign in with a seeded account.
+Then open **http://localhost:5173** and sign in with a seeded account. (A deployed copy is
+linked at the [top of this README](#-live-demo) if you would rather not run it locally.)
 
 | URL | What |
 | --- | --- |
@@ -499,31 +536,97 @@ real Chromium browser):
 - organiser and admin dashboards, layout editor, venue picker, statistics
 - zero browser console errors
 
+**Not verified:** real SMTP delivery, because no mail credentials were available during
+development. The `smtp` code path exists but only the `file` and `console` transports have
+been exercised. Everything else about the email flow — recipient, subject, rendered body,
+embedded QR and the `email_log` record — is covered by tests.
+
 ---
 
 ## 19. Deployment
 
-**Backend**
+This project is deployed as **two services**: the API on Render and the SPA on Vercel.
 
-1. Set `NODE_ENV=production`, a strong `JWT_SECRET`, and `CORS_ORIGINS` to your frontend
-   origin.
-2. Point `DATABASE_FILE` at persistent storage (SQLite in WAL mode is fine for a single
-   node). For multiple API instances, move to PostgreSQL — the concurrency approach
-   (`BEGIN IMMEDIATE` → `SELECT … FOR UPDATE` or the same conditional `UPDATE … WHERE
-   status='AVAILABLE'`) ports directly, since the guarantees live in SQL, not in Node.
-3. `npm ci --omit=dev && npm run migrate && npm start` behind a reverse proxy that
-   forwards WebSocket upgrades on `/ws`.
-4. Set `MAIL_TRANSPORT=smtp` with real credentials supplied as environment variables.
+> **Why not Vercel for the backend?** It is serverless, and this API needs a long-lived
+> process for two reasons: persistent WebSocket connections, and the background TTL sweeper
+> that releases expired holds. Both die under a serverless model.
 
-**Frontend**
+### Backend — Render (Web Service)
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `backend` |
+| Environment | Node |
+| Build command | `npm install` |
+| Start command | `npm run migrate && npm run seed && npm start` |
+
+Environment variables:
+
+| Key | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | a long random string — see below |
+| `DATABASE_FILE` | `/var/data/ticket-booking.db` (with a disk) or `data/ticket-booking.db` |
+| `CORS_ORIGINS` | the deployed frontend origin, no trailing slash |
+| `HOLD_TTL_SECONDS` | `600` |
+| `WAITLIST_OFFER_TTL_SECONDS` | `300` |
+| `MAIL_TRANSPORT` | `file` (or `smtp` with real credentials) |
 
 ```bash
-cd frontend && VITE_API_URL=https://api.example.com npm run build
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-Serve `dist/` from any static host with SPA fallback (rewrite unknown paths to
-`index.html`).
+**Persistence.** SQLite is a file, so it needs somewhere to live. On a paid instance, mount
+a disk at `/var/data` and point `DATABASE_FILE` at it; bookings then survive restarts and
+the start command can be reduced to `npm start`. On the **free tier there is no disk**, so
+the filesystem resets on redeploy — which is why the start command above re-runs migrate
+and seed on every boot. Both are idempotent (`migrate` uses `IF NOT EXISTS`, `seed` skips
+rows that already exist), so this is safe to run repeatedly and guarantees the demo data is
+always present.
 
-**Notes** — run one sweeper per database (the scheduler is per-process; with several API
-instances, run it in a single worker or move expiry to a shared scheduler). Terminate TLS
-at the proxy and use `wss://` in production.
+Free instances also sleep after ~15 minutes of inactivity; the next request takes roughly a
+minute while the container wakes.
+
+### Frontend — Vercel
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `frontend` |
+| Framework preset | Vite |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+
+| Env var | Value |
+| --- | --- |
+| `VITE_API_URL` | the Render API origin, **no trailing slash** |
+
+`VITE_API_URL` is read at **build** time, not runtime — changing it requires a redeploy,
+not just a restart. The frontend derives the WebSocket URL from it, so an `https://` API
+origin automatically yields `wss://`.
+
+Add `frontend/vercel.json` so client-side routes such as `/bookings/3` resolve instead of
+404-ing:
+
+```json
+{ "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+```
+
+### After deploying
+
+Set `CORS_ORIGINS` on Render to the real Vercel origin and redeploy the API. If the seat map
+shows *"Reconnecting…"* instead of a green **Live** dot, the cause is almost always a
+mismatch between `VITE_API_URL` and `CORS_ORIGINS` — check scheme, host and the absence of a
+trailing slash on both.
+
+### Scaling beyond one instance
+
+Two things are single-node today and would need attention at scale:
+
+- **The database.** Move to PostgreSQL. The concurrency approach ports directly — the same
+  conditional `UPDATE … WHERE status='AVAILABLE'`, or `SELECT … FOR UPDATE` — because the
+  guarantees live in SQL, not in Node.
+- **The sweeper.** It runs per process, so several API instances would sweep redundantly.
+  Run it in a single worker, or move expiry to a shared scheduler.
+
+WebSocket fan-out is also in-process; multiple instances would need a shared pub/sub layer
+(Redis or similar) so a hold placed on instance A reaches a client connected to instance B.
